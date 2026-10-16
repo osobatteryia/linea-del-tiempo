@@ -425,7 +425,7 @@ function msgHTML(){
   return `<div class="banner">${esc(st.msg.t)}${st.msg.again?`<div class="row" style="margin-top:10px"><button class="ghost" data-act="otra">Otra canción</button><button class="ghost" data-act="forceReveal">Revelar igual</button></div>`:""}</div>`;
 }
 function hostPanel(){
-  if (!isHost || !st || st.src !== "spotify") return "";
+  if (!isHost || (st ? st.src : setup.src) !== "spotify") return "";
   if (!clientId()) return `<div class="banner">Este es el celular anfitrión. Falta el Client ID de Spotify.
     <div class="prow" style="margin-top:10px"><input id="cid" placeholder="Client ID de Spotify" data-act="cid"><button class="gold" data-act="saveCid">Guardar</button></div></div>`;
   if (!tok()) return `<div class="banner">Este es el celular anfitrión. Conecta tu Spotify para que la música avance sola.
