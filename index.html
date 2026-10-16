@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0e1b21">
+<title>Línea del Tiempo Musical</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Figtree:wght@400;600;700&family=JetBrains+Mono:wght@700&display=swap">
+<style>
+/* Layout: una columna estrecha tipo app de bolsillo; la línea de tiempo es una pila vertical de cartas con ranuras entre ellas. Tema único oscuro, pensado para jugar de noche. */
+:root{
+  --bg:#0e1b21; --surface:#162a33; --line:#24414d; --fg:#f4ede1; --muted:#9db3ad;
+  --accent:#ff5a3d; --gold:#ffc53d; --ok:#4fd18b; --bad:#ff6b8a;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --body:"Figtree",ui-sans-serif,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--bg);color:var(--fg)}
+body{font-family:var(--body);font-size:16px;line-height:1.45;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 40px}
+#app{max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+h1,h2{font-family:var(--display);font-weight:800;letter-spacing:-.02em;text-wrap:balance;margin:0;line-height:1.05}
+h1{font-size:2.3rem}
+h2{font-size:1.6rem}
+p{margin:0}
+.muted{color:var(--muted)}
+.label{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700}
+button,.btn{font:inherit;font-weight:700;border:0;border-radius:14px;padding:14px 18px;cursor:pointer;color:var(--bg);background:var(--fg);text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:50px}
+button:focus-visible,.btn:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.primary{background:var(--accent);color:#fff}
+.ghost{background:transparent;color:var(--fg);border:1.5px solid var(--line)}
+.gold{background:var(--gold);color:#2a1d00}
+button:disabled{opacity:.35;cursor:not-allowed}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>*{flex:1 1 140px}
+input,select{font:inherit;color:var(--fg);background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;width:100%;min-width:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:14px}
+.players{display:flex;flex-direction:column;gap:8px}
+.prow{display:flex;gap:8px}
+.prow input{flex:1}
+.prow button{min-height:auto;padding:0 14px;flex:0 0 auto}
+/* marcador */
+.score{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin:0 -2px}
+.chip{flex:0 0 auto;background:var(--surface);border:1.5px solid var(--line);border-radius:999px;padding:6px 12px;font-size:.85rem;display:flex;gap:8px;align-items:center;white-space:nowrap}
+.chip.on{border-color:var(--accent);background:color-mix(in oklab,var(--accent) 18%,var(--surface))}
+.chip b{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.tok{display:inline-flex;gap:3px}
+.tok i{width:8px;height:8px;border-radius:50%;background:var(--gold);display:block}
+/* vinilo / DJ */
+.dj{display:grid;grid-template-columns:96px 1fr;gap:16px;align-items:center}
+.vinyl{width:96px;height:96px;border-radius:50%;background:repeating-radial-gradient(circle at center,#0a1317 0 2px,#13232a 2px 4px);position:relative;box-shadow:0 0 0 2px var(--line)}
+.vinyl::after{content:"?";position:absolute;inset:32px;border-radius:50%;background:var(--accent);color:#fff;font-family:var(--display);font-weight:800;font-size:1.4rem;display:grid;place-items:center}
+.spin .vinyl{animation:spin 3s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin .vinyl{animation:none}}
+/* línea de tiempo */
+.tl{display:flex;flex-direction:column;gap:6px}
+.card{border-radius:16px;padding:12px 16px;display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:center;color:#10161a}
+.card .yr{font-family:var(--mono);font-size:1.7rem;grid-row:span 2;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.card .t{font-weight:700;line-height:1.2;min-width:0}
+.card .a{font-size:.85rem;opacity:.75;min-width:0}
+.card.new{outline:3px solid var(--fg);outline-offset:2px}
+.mystery{background:repeating-linear-gradient(135deg,var(--accent) 0 12px,#e64a2e 12px 24px);color:#fff;border-radius:16px;padding:14px 16px;font-family:var(--display);font-weight:800;font-size:1.2rem;text-align:center}
+.mystery.steal{background:repeating-linear-gradient(135deg,var(--gold) 0 12px,#e9ad1d 12px 24px);color:#2a1d00}
+.slot{min-height:40px;padding:8px 12px;border-radius:12px;background:transparent;border:1.5px dashed var(--line);color:var(--muted);font-weight:600;font-size:.9rem;width:100%}
+.slot:hover{border-color:var(--muted);color:var(--fg)}
+.slot.blocked{opacity:.3;pointer-events:none}
+/* revelado */
+.reveal{border-radius:22px;padding:22px;display:flex;flex-direction:column;gap:6px;color:#10161a;animation:pop .45s ease-out}
+.reveal .yr{font-family:var(--mono);font-size:3.6rem;line-height:1;letter-spacing:-.04em}
+.reveal .t{font-family:var(--display);font-weight:800;font-size:1.5rem;line-height:1.1}
+@keyframes pop{from{transform:rotateY(80deg);opacity:.2}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.reveal{animation:none}}
+.verdict{font-family:var(--display);font-weight:800;font-size:1.35rem}
+.verdict.ok{color:var(--ok)}.verdict.bad{color:var(--bad)}
+.steals{display:flex;flex-direction:column;gap:8px}
+details summary{cursor:pointer;font-weight:700}
+details ol{margin:10px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:6px;color:var(--muted)}
+.foot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.foot button{min-height:40px;padding:8px 14px;font-size:.85rem}
+.podium{display:flex;flex-direction:column;gap:8px}
+.podium div{display:flex;justify-content:space-between;background:var(--surface);border-radius:12px;padding:12px 16px}
+.podium b{font-family:var(--mono)}
+.banner{background:color-mix(in oklab,var(--gold) 16%,var(--surface));border:1px solid var(--gold);border-radius:14px;padding:12px 14px;font-size:.9rem}
+.you{background:var(--gold);color:#2a1d00;border-radius:999px;padding:1px 7px;font-size:.7rem;font-weight:700}
+
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.code{font-family:var(--mono);color:var(--fg);letter-spacing:.08em;font-size:.95rem}
+.live{font-size:.78rem;font-weight:700;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.live.on{color:var(--ok);border-color:var(--ok)}
+.live.error{color:var(--bad);border-color:var(--bad)}
+.hero{display:flex;flex-direction:column;gap:8px}
+.field{display:flex;flex-direction:column;gap:6px}
+.invite{align-items:center;text-align:center}
+.qr{background:#f4ede1;padding:10px;border-radius:14px;line-height:0;min-height:20px}
+.qr img,.qr canvas{display:block}
+.sel{user-select:all;word-break:break-all;font-family:var(--mono);font-size:.85rem}
+.mini{min-height:0;padding:4px 10px;font-size:.8rem}
+.pulse{animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.45}}
+@media (prefers-reduced-motion:reduce){.pulse{animation:none}}
+body{padding-top:max(16px,env(safe-area-inset-top,0px));padding-bottom:max(40px,env(safe-area-inset-bottom,0px))}
+</style>
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const S=[
+["Hound Dog","Elvis Presley",1956,"I"],["Johnny B. Goode","Chuck Berry",1958,"I"],["La Bamba","Ritchie Valens",1958,"L"],
+["I Want to Hold Your Hand","The Beatles",1963,"I"],["(I Can't Get No) Satisfaction","The Rolling Stones",1965,"I"],
+["Gracias a la Vida","Violeta Parra",1966,"L"],["Good Vibrations","The Beach Boys",1966,"I"],["Respect","Aretha Franklin",1967,"I"],
+["Light My Fire","The Doors",1967,"I"],["Hey Jude","The Beatles",1968,"I"],["Mrs. Robinson","Simon & Garfunkel",1968,"I"],
+["Te Recuerdo Amanda","Víctor Jara",1969,"L"],["Y Volveré","Los Ángeles Negros",1970,"L"],["Oye Como Va","Santana",1970,"L"],
+["Imagine","John Lennon",1971,"I"],["Stairway to Heaven","Led Zeppelin",1971,"I"],["Todos Juntos","Los Jaivas",1972,"L"],
+["Superstition","Stevie Wonder",1972,"I"],["Rocket Man","Elton John",1972,"I"],["Mamma Mia","ABBA",1975,"I"],
+["Bohemian Rhapsody","Queen",1975,"I"],["Dancing Queen","ABBA",1976,"I"],["Stayin' Alive","Bee Gees",1977,"I"],
+["Heroes","David Bowie",1977,"I"],["Y.M.C.A.","Village People",1978,"I"],["September","Earth, Wind & Fire",1978,"I"],
+["Don't Stop Me Now","Queen",1978,"I"],["I Will Survive","Gloria Gaynor",1978,"I"],["Sultans of Swing","Dire Straits",1978,"I"],
+["Vivir Así Es Morir de Amor","Camilo Sesto",1978,"L"],["Another Brick in the Wall, Pt. 2","Pink Floyd",1979,"I"],
+["Back in Black","AC/DC",1980,"I"],["Another One Bites the Dust","Queen",1980,"I"],["Could You Be Loved","Bob Marley & The Wailers",1980,"I"],
+["Eye of the Tiger","Survivor",1982,"I"],["Africa","Toto",1982,"I"],["Every Breath You Take","The Police",1983,"I"],
+["Girls Just Want to Have Fun","Cyndi Lauper",1983,"I"],["Sweet Dreams (Are Made of This)","Eurythmics",1983,"I"],
+["Like a Virgin","Madonna",1984,"I"],["Wake Me Up Before You Go-Go","Wham!",1984,"I"],["Querida","Juan Gabriel",1984,"L"],
+["We Are Sudamerican Rockers","Los Prisioneros",1984,"L"],["Take On Me","a-ha",1985,"I"],["The Final Countdown","Europe",1986,"I"],
+["Livin' on a Prayer","Bon Jovi",1986,"I"],["Hijo de la Luna","Mecano",1986,"L"],["Persiana Americana","Soda Stereo",1986,"L"],
+["El Baile de los que Sobran","Los Prisioneros",1986,"L"],["Bad","Michael Jackson",1987,"I"],["With or Without You","U2",1987,"I"],
+["Welcome to the Jungle","Guns N' Roses",1987,"I"],["I Wanna Dance with Somebody","Whitney Houston",1987,"I"],
+["La Incondicional","Luis Miguel",1988,"L"],["El Hombre que Yo Amo","Myriam Hernández",1988,"L"],["Like a Prayer","Madonna",1989,"I"],
+["De Música Ligera","Soda Stereo",1990,"L"],["Tren al Sur","Los Prisioneros",1990,"L"],["Entre Dos Tierras","Héroes del Silencio",1990,"L"],
+["Smells Like Teen Spirit","Nirvana",1991,"I"],["Losing My Religion","R.E.M.",1991,"I"],["I Will Always Love You","Whitney Houston",1992,"I"],
+["Creep","Radiohead",1992,"I"],["Oye Mi Amor","Maná",1992,"L"],["Matador","Los Fabulosos Cadillacs",1993,"L"],
+["Zombie","The Cranberries",1994,"I"],["Basket Case","Green Day",1994,"I"],["Amor Prohibido","Selena",1994,"L"],
+["Lamento Boliviano","Enanitos Verdes",1994,"L"],["Wonderwall","Oasis",1995,"I"],["Estoy Aquí","Shakira",1995,"L"],
+["Déjate Caer","Los Tres",1995,"L"],["Wannabe","Spice Girls",1996,"I"],["La Flaca","Jarabe de Palo",1996,"L"],
+["Corazón Partío","Alejandro Sanz",1997,"L"],["Chan Chan","Buena Vista Social Club",1997,"L"],
+["...Baby One More Time","Britney Spears",1998,"I"],["La Copa de la Vida","Ricky Martin",1998,"L"],["Suavemente","Elvis Crespo",1998,"L"],
+["I Want It That Way","Backstreet Boys",1999,"I"],["Scar Tissue","Red Hot Chili Peppers",1999,"I"],["Smooth","Santana ft. Rob Thomas",1999,"I"],
+["Livin' la Vida Loca","Ricky Martin",1999,"L"],["Yellow","Coldplay",2000,"I"],["Mentira","La Ley",2000,"L"],
+["Whenever, Wherever","Shakira",2001,"L"],["Lose Yourself","Eminem",2002,"I"],["A Dios le Pido","Juanes",2002,"L"],
+["Obsesión","Aventura",2002,"L"],["Torero","Chayanne",2002,"L"],["Crazy in Love","Beyoncé ft. Jay-Z",2003,"I"],
+["Hey Ya!","Outkast",2003,"I"],["Seven Nation Army","The White Stripes",2003,"I"],["Mr. Brightside","The Killers",2003,"I"],
+["Numb","Linkin Park",2003,"I"],["Eres","Café Tacvba",2003,"L"],["Rosas","La Oreja de Van Gogh",2003,"L"],
+["Gasolina","Daddy Yankee",2004,"L"],["Feel Good Inc.","Gorillaz",2005,"I"],["Atrévete-te-te","Calle 13",2005,"L"],
+["Rehab","Amy Winehouse",2006,"I"],["Crazy","Gnarls Barkley",2006,"I"],["Hips Don't Lie","Shakira ft. Wyclef Jean",2006,"L"],
+["Crimen","Gustavo Cerati",2006,"L"],["Umbrella","Rihanna ft. Jay-Z",2007,"I"],["Viva la Vida","Coldplay",2008,"I"],
+["Poker Face","Lady Gaga",2008,"I"],["Bailando Solo","Los Bunkers",2008,"L"],["I Gotta Feeling","The Black Eyed Peas",2009,"I"],
+["Hey, Soul Sister","Train",2009,"I"],["Rolling in the Deep","Adele",2010,"I"],["Waka Waka (Esto es África)","Shakira",2010,"L"],
+["Danza Kuduro","Don Omar ft. Lucenzo",2010,"L"],["Somebody That I Used to Know","Gotye ft. Kimbra",2011,"I"],
+["Party Rock Anthem","LMFAO",2011,"I"],["Gangnam Style","PSY",2012,"I"],["Get Lucky","Daft Punk ft. Pharrell Williams",2013,"I"],
+["Wake Me Up","Avicii",2013,"I"],["Happy","Pharrell Williams",2013,"I"],["Vivir Mi Vida","Marc Anthony",2013,"L"],
+["Propuesta Indecente","Romeo Santos",2013,"L"],["Uptown Funk","Mark Ronson ft. Bruno Mars",2014,"I"],
+["Thinking Out Loud","Ed Sheeran",2014,"I"],["Bailando","Enrique Iglesias",2014,"L"],["Tu Falta de Querer","Mon Laferte",2015,"L"],
+["El Perdón","Nicky Jam & Enrique Iglesias",2015,"L"],["Shape of You","Ed Sheeran",2017,"I"],["Despacito","Luis Fonsi ft. Daddy Yankee",2017,"L"],
+["Mi Gente","J Balvin & Willy William",2017,"L"],["Shallow","Lady Gaga & Bradley Cooper",2018,"I"],["Malamente","Rosalía",2018,"L"],
+["Dura","Daddy Yankee",2018,"L"],["Bad Guy","Billie Eilish",2019,"I"],["Blinding Lights","The Weeknd",2019,"I"],
+["Con Calma","Daddy Yankee ft. Snow",2019,"L"],["Tusa","Karol G & Nicki Minaj",2019,"L"],["Levitating","Dua Lipa",2020,"I"],
+["Dákiti","Bad Bunny & Jhay Cortez",2020,"L"],["Stay","The Kid LAROI & Justin Bieber",2021,"I"],["As It Was","Harry Styles",2022,"I"],
+["Anti-Hero","Taylor Swift",2022,"I"],["Tití Me Preguntó","Bad Bunny",2022,"L"],["Me Porto Bonito","Bad Bunny & Chencho Corleone",2022,"L"],
+["Despechá","Rosalía",2022,"L"],["Una Noche en Medellín","Cris MJ",2022,"L"],["Quevedo: Bzrp Music Sessions, Vol. 52","Bizarrap & Quevedo",2022,"L"],
+["Flowers","Miley Cyrus",2023,"I"],["Shakira: Bzrp Music Sessions, Vol. 53","Bizarrap & Shakira",2023,"L"],
+["Ella Baila Sola","Eslabon Armado & Peso Pluma",2023,"L"],["Espresso","Sabrina Carpenter",2024,"I"],["APT.","ROSÉ & Bruno Mars",2024,"I"],
+["Die With a Smile","Lady Gaga & Bruno Mars",2024,"I"],["Si Antes Te Hubiera Conocido","Karol G",2024,"L"],["DtMF","Bad Bunny",2025,"L"]
+];
+
+// ===== Configuración =====
+const SPOTIFY_CLIENT_ID = "";   // se puede pegar aquí o ingresarlo en la app
+const DEFAULT_PLAYLIST = "https://open.spotify.com/playlist/4BX1DjvzqAT3GePXKGzyTn";
+const BROKERS = ["wss://broker.emqx.io:8084/mqtt","wss://broker.hivemq.com:8884/mqtt"];
+const NS = "lineadeltiempo-oso-v1";
+const REDIRECT = location.origin + location.pathname;
+const SCOPES = "user-read-playback-state user-modify-playback-state user-read-currently-playing";
+
+// ===== Utilidades =====
+const $app = () => document.getElementById("app");
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ls = {
+  get(k, d = null) { try { const v = localStorage.getItem(NS + ":" + k); return v == null ? d : JSON.parse(v) } catch (e) { return d } },
+  set(k, v) { try { v == null ? localStorage.removeItem(NS + ":" + k) : localStorage.setItem(NS + ":" + k, JSON.stringify(v)) } catch (e) {} }
+};
+const rid = () => Math.random().toString(36).slice(2, 10);
+const yr = e => e[2];
+const keyOf = e => e ? e[0] + "|" + e[2] : "";
+const card = i => S[i].slice(0, 3);
+function color(y){const d=Math.max(0,Math.min(7,Math.floor((y-1950)/10)));const h=[48,30,10,340,300,200,160,95][d];return `hsl(${h} 80% 72%)`}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function insert(tl,e){tl.push(e);tl.sort((a,b)=>yr(a)-yr(b))}
+function fits(tl,slot,y){const a=tl[slot-1],b=tl[slot];return(a==null||yr(a)<=y)&&(b==null||yr(b)>=y)}
+const norm=s=>String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
+  .replace(/\s*[\(\[].*?[\)\]]/g,"").replace(/\s+-\s+.*$/,"").replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim();
+function findInDB(name,artist){
+  const n=norm(name),a=norm(artist);
+  return S.find(s=>norm(s[0])===n&&(a.includes(norm(s[1]).split(" ")[0])||norm(s[1]).includes(a.split(" ")[0])));
+}
+
+// ===== Estado =====
+const myId = ls.get("clientId") || (() => { const v = rid(); ls.set("clientId", v); return v })();
+let room = new URLSearchParams(location.search).get("sala");
+room = room ? room.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) : null;
+let st = null;            // estado compartido de la partida
+let received = false;     // ya llegó el estado de la sala
+let menuOpen = false, confirmReset = false, yearDraft = "", joinDraft = "";
+let setup = Object.assign({names:["Ana","Pipe","Coni"],target:10,filter:"all",tokens:2,src:"spotify",playlist:DEFAULT_PLAYLIST}, ls.get("setup", {}));
+let me = room ? ls.get("me:" + room) : null;
+let isHost = room ? !!ls.get("host:" + room) : false;
+let conn = "off";         // off | connecting | on | error
+let client = null, topic = null, handledReq = null, hostBusy = false;
+
+function setMe(v){ me = v; ls.set("me:" + room, v) }
+const allHere = () => me === "todos";
+const spot = () => st && st.src === "spotify";
+
+// ===== Conexión en vivo (MQTT público, mensaje retenido por sala) =====
+function connectRoom(brokerIdx = 0){
+  if (!room) return;
+  if (!window.mqtt){ conn = "error"; render(); return }
+  topic = `${NS}/salas/${room}/estado`;
+  conn = "connecting"; render();
+  const c = mqtt.connect(BROKERS[brokerIdx], { clientId: "ldt_" + myId + "_" + rid().slice(0,4), clean: true, connectTimeout: 8000, reconnectPeriod: 3000 });
+  client = c;
+  let ok = false;
+  const fail = setTimeout(() => { if (!ok && brokerIdx + 1 < BROKERS.length){ c.end(true); connectRoom(brokerIdx + 1) } }, 9000);
+  c.on("connect", () => { ok = true; clearTimeout(fail); conn = "on"; c.subscribe(topic, { qos: 1 }); setTimeout(() => { received = true; render() }, 2500); render() });
+  c.on("reconnect", () => { if (ok){ conn = "connecting"; render() } });
+  c.on("offline", () => { conn = "connecting"; render() });
+  c.on("error", () => {});
+  c.on("message", (t, buf) => {
+    let d; try { d = JSON.parse(buf.toString()) } catch (e) { return }
+    received = true;
+    if (d.by === myId && d.seq === lastSeq) { hostCheck(); return }   // mi propio eco
+    st = d.st || null;
+    if (st && typeof me === "number" && me >= st.players.length) setMe(null);
+    const typing = document.activeElement && document.activeElement.tagName === "INPUT";
+    if (!typing) render();
+    hostCheck();
+  });
+}
+let lastSeq = 0;
+function commit(){
+  ls.set("setup", setup);
+  if (!client || conn !== "on") { render(); return }
+  lastSeq = Date.now();
+  client.publish(topic, JSON.stringify({ st, by: myId, seq: lastSeq }), { qos: 1, retain: true });
+  hostCheck();
+}
+
+// ===== Spotify (solo en el celular anfitrión) =====
+const clientId = () => SPOTIFY_CLIENT_ID || ls.get("spotifyClientId", "");
+const tok = () => ls.get("spotifyToken");
+const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+async function spotifyLogin(){
+  const v = b64url(crypto.getRandomValues(new Uint8Array(48)));
+  const ch = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v)));
+  ls.set("pkce", v);
+  const q = new URLSearchParams({ response_type:"code", client_id: clientId(), scope: SCOPES, redirect_uri: REDIRECT, code_challenge_method:"S256", code_challenge: ch, state: room || "" });
+  location.href = "https://accounts.spotify.com/authorize?" + q;
+}
+async function spotifyCallback(){
+  const p = new URLSearchParams(location.search);
+  const code = p.get("code"), state = p.get("state"), err = p.get("error");
+  if (!code && !err) return false;
+  if (code){
+    const body = new URLSearchParams({ grant_type:"authorization_code", code, redirect_uri: REDIRECT, client_id: clientId(), code_verifier: ls.get("pkce","") });
+    try {
+      const r = await fetch("https://accounts.spotify.com/api/token", { method:"POST", headers:{ "Content-Type":"application/x-www-form-urlencoded" }, body });
+      const j = await r.json();
+      if (j.access_token) ls.set("spotifyToken", { a: j.access_token, r: j.refresh_token, exp: Date.now() + (j.expires_in - 60) * 1000 });
+      else ls.set("spotifyError", j.error_description || j.error || "No se pudo conectar");
+    } catch (e) { ls.set("spotifyError", "No se pudo conectar con Spotify") }
+  }
+  history.replaceState(null, "", REDIRECT + (state ? "?sala=" + state : ""));
+  room = state || room;
+  return true;
+}
+async function accessToken(){
+  const t = tok(); if (!t) return null;
+  if (Date.now() < t.exp) return t.a;
+  const body = new URLSearchParams({ grant_type:"refresh_token", refresh_token: t.r, client_id: clientId() });
+  const r = await fetch("https://accounts.spotify.com/api/token", { method:"POST", headers:{ "Content-Type":"application/x-www-form-urlencoded" }, body });
+  const j = await r.json();
+  if (!j.access_token){ ls.set("spotifyToken", null); return null }
+  ls.set("spotifyToken", { a: j.access_token, r: j.refresh_token || t.r, exp: Date.now() + (j.expires_in - 60) * 1000 });
+  return j.access_token;
+}
+async function sp(method, path, body){
+  const a = await accessToken();
+  if (!a) throw { msg: "Conecta Spotify de nuevo desde el celular anfitrión." };
+  const r = await fetch("https://api.spotify.com/v1" + path, { method, headers: { Authorization: "Bearer " + a, ...(body ? { "Content-Type":"application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  if (r.status === 204) return null;
+  let j = null; try { j = await r.json() } catch (e) {}
+  if (!r.ok){
+    const reason = j && j.error && (j.error.reason || j.error.message) || "";
+    if (r.status === 404 || reason === "NO_ACTIVE_DEVICE") throw { msg: "No hay ningún Spotify abierto. Abre la app de Spotify en el celular del parlante y vuelve a intentar." };
+    if (r.status === 403) throw { msg: "Spotify no dejó controlar la música. Revisa que la cuenta sea Premium y que tu usuario esté agregado en la app de Spotify for Developers." };
+    if (r.status === 429) throw { msg: "Spotify pidió esperar un momento. Intenta de nuevo en unos segundos." };
+    throw { msg: "Spotify respondió con un error (" + r.status + ")." };
+  }
+  return j;
+}
+function playlistUri(s){
+  const m = String(s || "").match(/playlist[\/:]([A-Za-z0-9]+)/);
+  return m ? "spotify:playlist:" + m[1] : null;
+}
+async function pickDevice(){
+  const d = await sp("GET", "/me/player/devices");
+  const list = (d && d.devices) || [];
+  const dev = list.find(x => x.is_active) || list[0];
+  if (!dev) throw { msg: "No encuentro ningún Spotify abierto. Abre la app de Spotify en el celular del parlante, reproduce algo un segundo y vuelve a intentar." };
+  return dev.id;
+}
+const wait = ms => new Promise(r => setTimeout(r, ms));
+async function hostStart(){
+  const dev = await pickDevice();
+  const uri = playlistUri(st.playlist) || playlistUri(DEFAULT_PLAYLIST);
+  await sp("PUT", "/me/player/play?device_id=" + dev, { context_uri: uri });
+  await wait(600);
+  try { await sp("PUT", "/me/player/shuffle?state=true&device_id=" + dev) } catch (e) {}
+  await wait(400);
+  await sp("POST", "/me/player/next?device_id=" + dev);
+}
+async function hostNext(){
+  try { await sp("POST", "/me/player/next") }
+  catch (e) { await hostStart() }
+}
+async function hostReveal(force){
+  const cur = await sp("GET", "/me/player/currently-playing");
+  const it = cur && cur.item;
+  if (!it || !it.name) throw { msg: "Spotify no está reproduciendo nada. Toca \"Poner canción\" y vuelve a revelar." };
+  if (!force && it.uri === st.lastUri) throw { msg: "Sigue sonando la canción del turno anterior. Toca \"Otra canción\" y vuelve a revelar.", again: true };
+  if (!force && st.used.includes(it.uri)) throw { msg: "Esta canción ya salió en la partida. Toca \"Otra canción\" o revélala igual.", again: true };
+  const artist = (it.artists || []).map(a => a.name).join(", ");
+  const m = findInDB(it.name, artist);
+  let y = m ? m[2] : parseInt(String(it.album && it.album.release_date || "").slice(0, 4), 10);
+  const from = m ? "lista" : "spotify";
+  st.lastUri = it.uri; st.used.push(it.uri);
+  if (!(y >= 1900 && y <= 2100)){ st.pending = [it.name, artist]; st.phase = "needyear"; return }
+  st.song = [it.name, artist, y, from]; reveal();
+}
+// El anfitrión ejecuta los pedidos que hacen los demás celulares
+async function hostCheck(){
+  if (!isHost || !st || !st.req || hostBusy || st.req.id === handledReq) return;
+  if (!tok()) return;
+  const req = st.req; handledReq = req.id; hostBusy = true;
+  try {
+    if (req.type === "start") await hostStart();
+    if (req.type === "next") await hostNext();
+    if (req.type === "start" || req.type === "next"){ st.heard = true; st.msg = null }
+    if (req.type === "reveal") { st.msg = null; await hostReveal(req.force) }
+  } catch (e) {
+    st.msg = { t: (e && e.msg) || "Algo falló al hablar con Spotify. Intenta de nuevo.", again: !!(e && e.again) };
+  } finally {
+    if (st.req && st.req.id === req.id) st.req = null;
+    hostBusy = false; commit(); render();
+  }
+}
+function request(type, extra){ st.req = Object.assign({ type, id: rid() }, extra || {}); st.msg = null }
+
+// Mantener la pantalla del anfitrión encendida
+let wake = null;
+async function keepAwake(){ try { if (isHost && "wakeLock" in navigator && !wake){ wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", () => wake = null) } } catch (e) {} }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") keepAwake() });
+
+// ===== Reglas =====
+function startGame(){
+  const names = setup.names.map(n => n.trim()).filter(Boolean);
+  if (names.length < 2) return;
+  const pool = shuffle(S.map((_, i) => i).filter(i => setup.filter === "all" || S[i][3] === setup.filter));
+  const src = setup.src;
+  st = { phase:"turn", src, playlist: setup.playlist, players: names.map(n => ({ name:n, tl:[card(pool.pop())], tk: setup.tokens })), cur:0, deck: pool,
+    song: src === "spotify" ? null : card(pool.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false,
+    target: setup.target, round:1, used:[], lastUri:null, req:null, msg:null, pending:null };
+  if (src === "spotify") request("start");
+  if (me != null && me !== "todos") setMe(null);
+}
+function nextTurn(){
+  const win = st.players.find(p => p.tl.length >= st.target);
+  if (win || (!spot() && !st.deck.length)){ st.phase = "win"; return }
+  st.cur = (st.cur + 1) % st.players.length; if (st.cur === 0) st.round++;
+  Object.assign(st, { phase:"turn", song: spot() ? null : card(st.deck.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false, pending:null });
+  if (spot()) request("next");
+}
+function reveal(){
+  const p = st.players[st.cur], y = yr(st.song);
+  const ok = fits(p.tl, st.slot, y);
+  let stolen = false;
+  if (!ok && st.stealer != null && fits(p.tl, st.sslot, y)) stolen = true;
+  const owner = ok ? st.cur : stolen ? st.stealer : null;
+  if (owner != null) insert(st.players[owner].tl, st.song);
+  st.res = { ok, stolen, owner }; st.phase = "reveal"; st.robando = null;
+}
+function undoReveal(){
+  if (st.res && st.res.owner != null){ const tl = st.players[st.res.owner].tl; const k = keyOf(st.song); const i = tl.findIndex(e => keyOf(e) === k); if (i >= 0) tl.splice(i, 1) }
+  st.res = null;
+}
+
+// ===== Vistas =====
+function slotLabel(tl,i){
+  if(!tl.length)return"Aquí";
+  if(i===0)return`Antes de ${yr(tl[0])}`;
+  if(i===tl.length)return`Después de ${yr(tl[i-1])}`;
+  const a=yr(tl[i-1]),b=yr(tl[i]);
+  return a===b?`También ${a}`:`Entre ${a} y ${b}`;
+}
+function cardHTML(e,isNew){const[t,a,y]=e;return`<div class="card${isNew?" new":""}" style="background:${color(y)}"><span class="yr">${y}</span><span class="t">${esc(t)}</span><span class="a">${esc(a)}</span></div>`}
+function tlHTML(tl,{pick=false,sel=null,highlight=null}={}){
+  let h='<div class="tl">';const hk=keyOf(highlight);
+  for(let i=0;i<=tl.length;i++){
+    if(sel===i)h+=`<div class="mystery">Canción de ${esc(st.players[st.cur].name)}</div>`;
+    else if(pick)h+=`<button class="slot" data-act="slot" data-i="${i}">${slotLabel(tl,i)}</button>`;
+    if(i<tl.length)h+=cardHTML(tl[i],hk&&keyOf(tl[i])===hk);
+  }
+  return h+"</div>";
+}
+function scoreHTML(){
+  return `<div class="score">${st.players.map((p,i)=>`<div class="chip${i===st.cur?" on":""}">${esc(p.name)}${me===i?' <span class="you">tú</span>':""} <b>${p.tl.length}/${st.target}</b><span class="tok" aria-label="${p.tk} fichas">${"<i></i>".repeat(p.tk)}</span></div>`).join("")}</div>`;
+}
+function statusHTML(){
+  const label = conn === "on" ? "En vivo" : conn === "connecting" ? "Conectando…" : conn === "error" ? "Sin conexión" : "";
+  return `<div class="topbar"><span class="label">Sala <b class="code">${esc(room)}</b></span><span class="live ${conn}">${label}</span></div>`;
+}
+function msgHTML(){
+  if (!st || !st.msg) return "";
+  return `<div class="banner">${esc(st.msg.t)}${st.msg.again?`<div class="row" style="margin-top:10px"><button class="ghost" data-act="otra">Otra canción</button><button class="ghost" data-act="forceReveal">Revelar igual</button></div>`:""}</div>`;
+}
+function hostPanel(){
+  if (!isHost || !st || st.src !== "spotify") return "";
+  if (!clientId()) return `<div class="banner">Este es el celular anfitrión. Falta el Client ID de Spotify.
+    <div class="prow" style="margin-top:10px"><input id="cid" placeholder="Client ID de Spotify" data-act="cid"><button class="gold" data-act="saveCid">Guardar</button></div></div>`;
+  if (!tok()) return `<div class="banner">Este es el celular anfitrión. Conecta tu Spotify para que la música avance sola.
+    <div class="row" style="margin-top:10px"><button class="gold" data-act="spLogin">Conectar Spotify</button></div></div>`;
+  return "";
+}
+function linkHTML(){
+  const url = REDIRECT + "?sala=" + room;
+  return `<section class="panel invite"><span class="label">Invita a los jugadores</span>
+    <div class="qr" id="qr" aria-label="Código QR para entrar a la sala"></div>
+    <p>Escaneen el código o entren a <b class="sel">${esc(url)}</b></p>
+    <button class="ghost" data-act="copy">Copiar link</button></section>`;
+}
+function drawQR(){
+  const el = document.getElementById("qr");
+  if (!el || el.dataset.done || !window.QRCode) return;
+  el.dataset.done = 1;
+  try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
+}
+
+function render(){
+  const app = $app();
+  // Portada: crear o unirse
+  if (!room){
+    app.innerHTML = `<header class="hero"><span class="label">Juego musical para la casa</span><h1>Línea del Tiempo Musical</h1>
+      <p class="muted">Escucha, adivina el año y arma tu línea de tiempo. Cada uno juega desde su celular, sin crear cuentas.</p></header>
+      <section class="panel"><span class="label">Unirse a una sala</span>
+        <div class="prow"><input id="join" data-act="joinIn" placeholder="Código, ej: K7QM" maxlength="6" autocapitalize="characters" value="${esc(joinDraft)}"><button class="primary" data-act="join">Entrar</button></div></section>
+      <section class="panel"><span class="label">¿Eres quien pone la música?</span>
+        <p class="muted">Crea la sala en el celular que tiene tu Spotify. Ese será el celular anfitrión.</p>
+        <button class="gold" data-act="create">Crear sala nueva</button></section>`;
+    return;
+  }
+  if (conn !== "on" && !received){
+    app.innerHTML = `${statusHTML()}<section class="panel"><h2>Conectando a la sala…</h2><p class="muted">${conn==="error"?"No se pudo cargar la conexión. Revisa tu internet y recarga la página.":"Un momento."}</p></section>`;
+    return;
+  }
+  if (!st){
+    if (!isHost){
+      app.innerHTML = `${statusHTML()}<section class="panel"><h2>Esperando al anfitrión</h2><p class="muted">Cuando cree la partida, aparecerá aquí sola.</p></section>
+        <button class="ghost" data-act="leave">Salir de la sala</button>`;
+      return;
+    }
+    app.innerHTML = `${statusHTML()}
+    <header class="hero"><h1>Nueva partida</h1></header>
+    ${linkHTML()}
+    <section class="panel">
+      <span class="label">Jugadores o equipos</span>
+      <div class="players">${setup.names.map((n,i)=>`<div class="prow"><input id="pl${i}" value="${esc(n)}" data-act="name" data-i="${i}" maxlength="18" aria-label="Jugador ${i+1}"><button class="ghost" data-act="rm" data-i="${i}" aria-label="Quitar">✕</button></div>`).join("")}</div>
+      <button class="ghost" data-act="add" ${setup.names.length>=10?"disabled":""}>Agregar jugador</button>
+    </section>
+    <section class="panel">
+      <label class="field"><span class="label">Música</span>
+        <select id="src" data-act="src">
+          <option value="spotify" ${setup.src==="spotify"?"selected":""}>Spotify automático</option>
+          <option value="manual" ${setup.src==="manual"?"selected":""}>Un DJ busca cada canción</option>
+        </select></label>
+      ${setup.src==="spotify"?`<label class="field"><span class="label">Playlist de Spotify (link)</span><input id="pl" data-act="playlist" value="${esc(setup.playlist)}"></label>
+        <p class="muted" style="font-size:.88rem">La app pone la playlist en aleatorio, pasa a la siguiente canción en cada turno y lee cuál suena al revelar.</p>`
+      :`<label class="field"><span class="label">Canciones</span>
+        <select id="filter" data-act="filter">
+          <option value="all" ${setup.filter==="all"?"selected":""}>Todas (${S.length})</option>
+          <option value="L" ${setup.filter==="L"?"selected":""}>Solo latinas (${S.filter(s=>s[3]==="L").length})</option>
+          <option value="I" ${setup.filter==="I"?"selected":""}>Solo en inglés (${S.filter(s=>s[3]==="I").length})</option>
+        </select></label>`}
+      <div class="row">
+        <label class="field"><span class="label">Cartas para ganar</span>
+          <select id="target" data-act="target">${[5,7,10,12,15].map(n=>`<option ${n==setup.target?"selected":""}>${n}</option>`).join("")}</select></label>
+        <label class="field"><span class="label">Fichas iniciales</span>
+          <select id="tokens" data-act="tokens">${[0,1,2,3].map(n=>`<option ${n==setup.tokens?"selected":""}>${n}</option>`).join("")}</select></label>
+      </div>
+    </section>
+    ${setup.src==="spotify"&&(!clientId()||!tok())?hostPanel().replace("Este es el celular anfitrión. ",""):""}
+    <button class="primary" data-act="start" ${setup.names.filter(n=>n.trim()).length<2?"disabled":""}>Empezar partida</button>`;
+    drawQR();
+    return;
+  }
+  if (me == null && st.phase !== "win"){
+    app.innerHTML = `${statusHTML()}<header class="hero"><h1>¿Quién eres?</h1><p class="muted">Elige tu nombre para ver tu línea de tiempo en este celular.</p></header>
+      <div class="steals">${st.players.map((p,i)=>`<button class="ghost" data-act="iam" data-i="${i}">Soy ${esc(p.name)}</button>`).join("")}</div>
+      <button class="gold" data-act="iam" data-i="todos">Este celular es para todos</button>`;
+    return;
+  }
+  const p = st.players[st.cur];
+  const meName = typeof me === "number" && st.players[me] ? st.players[me].name : null;
+  const waitingHost = st.req ? `<p class="muted pulse">${st.req.type==="reveal"?"Leyendo la canción en Spotify…":"Poniendo la canción en Spotify…"}</p>` : "";
+  const foot = `<div class="foot"><span class="label" style="align-self:center">Ronda ${st.round}${spot()?"":` · quedan ${st.deck.length} canciones`}</span><button class="ghost" data-act="menu">Menú</button></div>`;
+  const head = `${statusHTML()}${hostPanel()}${scoreHTML()}`;
+
+  if (menuOpen){
+    app.innerHTML = `${statusHTML()}<section class="panel"><h2>Menú</h2>
+      <p class="muted">${meName?`En este celular juega ${esc(meName)}.`:"Este celular es para todos."}${isHost?" Es el celular anfitrión.":""}</p>
+      <button class="primary" data-act="back">Seguir jugando</button>
+      <button class="ghost" data-act="iamReset">Cambiar quién soy</button>
+      ${isHost?`<button class="ghost" data-act="invite">Mostrar QR para invitar</button>`:""}
+      ${spot()?`<button class="ghost" data-act="otra">Otra canción en Spotify</button>`:""}
+      <button class="ghost" data-act="end">Terminar y ver resultados</button>
+      <button class="${confirmReset?"primary":"ghost"}" data-act="again">${confirmReset?"Sí, borrar la partida para todos":"Nueva partida (borra esta)"}</button>
+      <button class="ghost" data-act="leave">Salir de la sala</button></section>
+      ${showInvite?linkHTML():""}`;
+    if (showInvite) drawQR();
+    return;
+  }
+  if (st.phase === "turn"){
+    const guessing = allHere() || me === st.cur;
+    let msg, extra = "";
+    if (spot()){
+      msg = st.heard ? (guessing ? "Escucha y elige dónde va." : `${esc(p.name)} está escuchando y eligiendo.`) : "Esperando que Spotify empiece…";
+      extra = `<div class="row"><button class="ghost" data-act="otra" ${st.req?"disabled":""}>${st.heard?"Otra canción":"Poner canción"}</button></div>`;
+    } else {
+      const dj = allHere() || me !== st.cur;
+      msg = me === st.cur ? "Otro jugador pone la canción desde su celular." : allHere() ? "Pásale el celular a otro jugador para que ponga la canción." : "Uno de ustedes pone la canción. No la muestres.";
+      if (dj){ const q = encodeURIComponent(st.song[0] + " " + st.song[1]);
+        extra = `<div class="row"><a class="btn primary" href="https://open.spotify.com/search/${q}" target="_blank" rel="noopener">Escuchar en Spotify</a><a class="btn ghost" href="https://www.youtube.com/results?search_query=${q}" target="_blank" rel="noopener">YouTube</a></div>` }
+    }
+    app.innerHTML = `${head}
+    <section class="panel">
+      <div class="dj${st.heard||!spot()?" spin":""}"><div class="vinyl"></div><div style="display:flex;flex-direction:column;gap:4px">
+        <span class="label">Turno de</span><h2>${me===st.cur?"Tu turno":esc(p.name)}</h2>
+        <p class="muted" style="font-size:.9rem">${msg}</p></div></div>
+      ${waitingHost}${extra}
+    </section>
+    ${msgHTML()}
+    <section style="display:flex;flex-direction:column;gap:10px">
+      <span class="label">${guessing?(st.slot==null?"Toca dónde crees que va":"Tu elección"):`Línea de ${esc(p.name)}${st.slot==null?" · eligiendo…":""}`}</span>
+      ${tlHTML(p.tl,{pick:guessing,sel:st.slot})}
+    </section>
+    ${guessing?`<div class="row">
+      <button class="primary" data-act="confirm" ${st.slot==null?"disabled":""}>Confirmar posición</button>
+      <button class="ghost" data-act="skip" ${p.tk<1||st.req?"disabled":""}>Saltar canción (1 ficha)</button>
+    </div>`:""}${foot}`;
+    return;
+  }
+  if (st.phase === "steal"){
+    if (st.robando != null){
+      const s = st.players[st.robando];
+      const mine = allHere() || me === st.robando;
+      app.innerHTML = `${head}
+      <section class="panel"><span class="label">Robo</span><h2>${mine&&!allHere()?"¿Dónde va?":esc(s.name)+(mine?", ¿dónde va?":" está robando")}</h2>
+        <p class="muted">${mine?`Elige un lugar distinto en la línea de ${esc(p.name)}.`:"Espera a que elija su posición."}</p></section>
+      ${tlHTML(p.tl,{pick:mine,sel:st.slot})}
+      ${mine?`<button class="ghost" data-act="cancelSteal">Cancelar robo</button>`:""}${foot}`;
+      return;
+    }
+    const others = st.players.map((q,i)=>({q,i})).filter(o=>o.i!==st.cur&&o.q.tk>0);
+    let stealUI;
+    if (allHere()) stealUI = others.length ? others.map(o=>`<button class="gold" data-act="pickStealer" data-i="${o.i}">Roba ${esc(o.q.name)}</button>`).join("") : `<p class="muted">Nadie tiene fichas para robar.</p>`;
+    else if (me === st.cur) stealUI = `<p class="muted">Los demás pueden robar desde su celular.</p>`;
+    else stealUI = st.players[me].tk > 0 ? `<button class="gold" data-act="pickStealer" data-i="${me}">Robar (1 ficha)</button>` : `<p class="muted">No tienes fichas para robar.</p>`;
+    app.innerHTML = `${head}
+    <section class="panel"><span class="label">Antes de revelar</span><h2>¿Alguien quiere robar?</h2>
+      <p class="muted">Cuesta 1 ficha. Si ${esc(p.name)} falla y el que roba acierta, se queda con la carta.</p>
+      <div class="steals">${stealUI}</div>
+    </section>
+    ${tlHTML(p.tl,{sel:st.slot})}
+    ${msgHTML()}${waitingHost}
+    <button class="primary" data-act="reveal" ${st.req?"disabled":""}>Revelar canción</button>${foot}`;
+    return;
+  }
+  if (st.phase === "needyear"){
+    const [t,a] = st.pending;
+    app.innerHTML = `${head}
+    <section class="panel"><span class="label">Falta el año</span><h2>${esc(t)}</h2><p class="muted">${esc(a)}</p>
+      <p>Escriban en qué año salió esta canción.</p>
+      <input id="yearIn" data-act="year" inputmode="numeric" maxlength="4" placeholder="Ej: 1994" value="${esc(yearDraft)}">
+      <button class="primary" data-act="setYear">Revelar con este año</button>
+    </section>${foot}`;
+    return;
+  }
+  if (st.phase === "reveal"){
+    const [t,a,y,from] = st.song;
+    const r = st.res;
+    const v = r.ok ? `<p class="verdict ok">¡Correcto! La carta es de ${esc(p.name)}.</p>`
+      : r.stolen ? `<p class="verdict ok">¡Robo exitoso! La carta es de ${esc(st.players[st.stealer].name)}.</p>`
+      : `<p class="verdict bad">${esc(p.name)} falló. La carta se descarta.</p>`;
+    const owner = r.owner != null ? st.players[r.owner] : null;
+    app.innerHTML = `${head}
+    <div class="reveal" style="background:${color(y)}"><span class="yr">${y}</span><span class="t">${esc(t)}</span><span>${esc(a)}</span></div>
+    ${v}
+    ${from==="spotify"||from==="manual"?`<p class="muted" style="font-size:.85rem">${from==="spotify"?"Año según el álbum en Spotify. Si es una reedición o recopilación, corríjanlo.":"Año ingresado por los jugadores."} <button class="ghost mini" data-act="fixYear">Corregir año</button></p>`:""}
+    <section class="panel"><span class="label">Bonus</span>
+      <p>¿${esc(p.name)} adivinó el título y el artista?</p>
+      <button class="gold" data-act="bonus" ${st.bonus||p.tk>=5?"disabled":""}>${st.bonus?"Ficha entregada":p.tk>=5?"Ya tiene 5 fichas":"Sí, darle 1 ficha"}</button>
+    </section>
+    ${owner?`<section style="display:flex;flex-direction:column;gap:10px"><span class="label">Línea de ${esc(owner.name)}</span>${tlHTML(owner.tl,{highlight:st.song})}</section>`:""}
+    <button class="primary" data-act="next">Siguiente turno</button>${foot}`;
+    return;
+  }
+  if (st.phase === "win"){
+    const rank = [...st.players].sort((a,b)=>b.tl.length-a.tl.length||b.tk-a.tk);
+    app.innerHTML = `${statusHTML()}<header class="hero"><span class="label">Fin de la partida</span><h1>¡Ganó ${esc(rank[0].name)}!</h1></header>
+    <div class="podium">${rank.map(q=>`<div><span>${esc(q.name)}</span><b>${q.tl.length} cartas</b></div>`).join("")}</div>
+    <section style="display:flex;flex-direction:column;gap:10px"><span class="label">Línea ganadora</span>${tlHTML(rank[0].tl)}</section>
+    ${isHost?`<button class="primary" data-act="again2">Nueva partida</button>`:`<p class="muted">El anfitrión puede empezar otra partida.</p>`}`;
+  }
+}
+let showInvite = false;
+
+// ===== Acciones =====
+function goRoom(code, host){
+  room = code; isHost = host; ls.set("host:" + code, host || null);
+  me = ls.get("me:" + code);
+  history.replaceState(null, "", REDIRECT + "?sala=" + code);
+  connectRoom(); keepAwake();
+}
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-act]"); if (!el) return;
+  const act = el.dataset.act, i = +el.dataset.i;
+  if (act !== "again") confirmReset = false;
+  let shared = true;
+  switch (act){
+    case "create": { const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let c = ""; for (let k = 0; k < 4; k++) c += abc[Math.floor(Math.random() * abc.length)]; goRoom(c, true); return }
+    case "join": { const c = joinDraft.toUpperCase().replace(/[^A-Z0-9]/g, ""); if (c.length < 3){ document.getElementById("join")?.focus(); return } goRoom(c, false); return }
+    case "leave": if (client) client.end(true); client = null; room = null; st = null; received = false; menuOpen = false; conn = "off"; history.replaceState(null, "", REDIRECT); render(); return;
+    case "copy": { const url = REDIRECT + "?sala=" + room; (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => { el.textContent = "Link copiado" }).catch(() => { el.textContent = url }); return }
+    case "invite": showInvite = !showInvite; render(); return;
+    case "saveCid": { const v = (document.getElementById("cid")?.value || "").trim(); if (v){ ls.set("spotifyClientId", v); render() } return }
+    case "spLogin": spotifyLogin(); return;
+    case "add": setup.names.push(""); ls.set("setup", setup); render(); return;
+    case "rm": setup.names.splice(i, 1); ls.set("setup", setup); render(); return;
+    case "start": if (setup.src === "spotify" && (!clientId() || !tok())){ document.querySelector('[data-act="spLogin"],#cid')?.scrollIntoView({ block:"center" }); return } startGame(); keepAwake(); break;
+    case "iam": setMe(el.dataset.i === "todos" ? "todos" : i); render(); return;
+    case "iamReset": setMe(null); menuOpen = false; render(); return;
+    case "menu": menuOpen = true; showInvite = false; render(); window.scrollTo({ top:0 }); return;
+    case "back": menuOpen = false; render(); return;
+    case "slot":
+      if (st.phase === "turn") st.slot = i;
+      else if (st.phase === "steal" && st.robando != null && i !== st.slot){
+        st.stealer = st.robando; st.sslot = i; st.players[st.robando].tk--; st.robando = null;
+        if (spot()) request("reveal"); else reveal();
+      } else return;
+      break;
+    case "confirm": st.phase = "steal"; st.robando = null; break;
+    case "otra": if (spot()){ request("next"); st.heard = false } break;
+    case "skip": st.players[st.cur].tk--; st.slot = null; st.heard = false;
+      if (spot()) request("next"); else { const n = st.deck.pop(); if (n == null) st.phase = "win"; else st.song = card(n) }
+      break;
+    case "pickStealer": if (st.robando == null) st.robando = i; break;
+    case "cancelSteal": st.robando = null; break;
+    case "reveal": if (st.phase === "steal" && st.robando == null){ if (spot()) request("reveal"); else reveal() } break;
+    case "forceReveal": request("reveal", { force: true }); break;
+    case "setYear": { const y = parseInt(yearDraft, 10); if (!(y >= 1900 && y <= 2100)){ document.getElementById("yearIn")?.focus(); return }
+      const [t,a] = st.pending; st.pending = null; st.song = [t, a, y, "manual"]; reveal(); break }
+    case "fixYear": yearDraft = String(st.song[2]); st.pending = [st.song[0], st.song[1]]; undoReveal(); st.phase = "needyear"; break;
+    case "bonus": if (!st.bonus){ st.players[st.cur].tk = Math.min(5, st.players[st.cur].tk + 1); st.bonus = true } break;
+    case "next": if (st.phase === "reveal") nextTurn(); break;
+    case "end": st.phase = "win"; menuOpen = false; break;
+    case "again": if (!confirmReset){ confirmReset = true; render(); return } confirmReset = false; st = null; menuOpen = false; break;
+    case "again2": st = null; break;
+    default: return;
+  }
+  if (shared) commit();
+  render(); window.scrollTo({ top:0 });
+});
+document.addEventListener("input", e => {
+  const el = e.target, a = el.dataset.act;
+  if (a === "name"){ setup.names[+el.dataset.i] = el.value; ls.set("setup", setup); const b = document.querySelector('[data-act="start"]'); if (b) b.disabled = setup.names.filter(n => n.trim()).length < 2 }
+  if (a === "playlist"){ setup.playlist = el.value; ls.set("setup", setup) }
+  if (a === "year") yearDraft = el.value.replace(/\D/g, "");
+  if (a === "joinIn") joinDraft = el.value;
+});
+document.addEventListener("change", e => {
+  const a = e.target.dataset.act;
+  if (a === "target") setup.target = +e.target.value;
+  if (a === "tokens") setup.tokens = +e.target.value;
+  if (a === "filter") setup.filter = e.target.value;
+  if (a === "src"){ setup.src = e.target.value; ls.set("setup", setup); render(); return }
+  ls.set("setup", setup);
+});
+document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "join") document.querySelector('[data-act="join"]')?.click() });
+
+// ===== Inicio =====
+(async () => {
+  await spotifyCallback();
+  if (room){ isHost = !!ls.get("host:" + room); me = ls.get("me:" + room) }
+  const err = ls.get("spotifyError"); if (err){ ls.set("spotifyError", null); setTimeout(() => alert("Spotify: " + err), 300) }
+  render();
+  if (room){ connectRoom(); keepAwake() }
+})();
+
+</script>
+</body>
+</html>
