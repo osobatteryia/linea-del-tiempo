@@ -222,29 +222,39 @@ function connectRoom(brokerIdx = 0){
   client = c;
   let ok = false;
   const fail = setTimeout(() => { if (!ok && brokerIdx + 1 < BROKERS.length){ c.end(true); connectRoom(brokerIdx + 1) } }, 9000);
-  c.on("connect", () => { ok = true; clearTimeout(fail); conn = "on"; c.subscribe(topic, { qos: 1 }); setTimeout(() => { received = true; render() }, 2500); render() });
+  c.on("connect", () => { ok = true; clearTimeout(fail); conn = "on"; c.subscribe(topic, { qos: 1 }, () => { if (dirty) setTimeout(flush, 1200) }); setTimeout(() => { received = true; render() }, 2500); render() });
   c.on("reconnect", () => { if (ok){ conn = "connecting"; render() } });
   c.on("offline", () => { conn = "connecting"; render() });
   c.on("error", () => {});
   c.on("message", (t, buf) => {
     let d; try { d = JSON.parse(buf.toString()) } catch (e) { return }
     received = true;
-    if (d.by === myId && d.seq === lastSeq) { hostCheck(); return }   // mi propio eco
-    st = d.st || null;
+    if (!(d.seq > curSeq)) { hostCheck(); return }   // mi propio eco o un estado más antiguo
+    curSeq = d.seq; dirty = false;
+    st = d.st || null; saveLocal();
     if (st && typeof me === "number" && me >= st.players.length) setMe(null);
     const typing = document.activeElement && document.activeElement.tagName === "INPUT";
     if (!typing) render();
     hostCheck();
   });
 }
-let lastSeq = 0;
+// Cada cambio lleva una marca de tiempo; si no hay conexión, se envía apenas vuelva
+let curSeq = 0, dirty = false;
+function saveLocal(){ if (room) ls.set("st:" + room, { st, seq: curSeq }) }
+function flush(){
+  if (!dirty || !client || conn !== "on") return;
+  client.publish(topic, JSON.stringify({ st, by: myId, seq: curSeq }), { qos: 1, retain: true });
+  dirty = false;
+}
 function commit(){
   ls.set("setup", setup);
-  if (!client || conn !== "on") { render(); return }
-  lastSeq = Date.now();
-  client.publish(topic, JSON.stringify({ st, by: myId, seq: lastSeq }), { qos: 1, retain: true });
+  curSeq = Math.max(Date.now(), curSeq + 1); dirty = true; saveLocal();
+  flush(); render();
   hostCheck();
 }
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && client && conn !== "on") { try { client.reconnect() } catch (e) {} }
+});
 
 // ===== Spotify (solo en el celular anfitrión) =====
 const clientId = () => SPOTIFY_CLIENT_ID || ls.get("spotifyClientId", "");
@@ -700,7 +710,9 @@ document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id
 // ===== Inicio =====
 (async () => {
   await spotifyCallback();
-  if (room){ isHost = !!ls.get("host:" + room); me = ls.get("me:" + room) }
+  if (room){ isHost = !!ls.get("host:" + room); me = ls.get("me:" + room);
+    const saved = ls.get("st:" + room);
+    if (saved && saved.seq){ st = saved.st; curSeq = saved.seq; received = true; dirty = isHost } }
   const err = ls.get("spotifyError"); if (err){ ls.set("spotifyError", null); setTimeout(() => alert("Spotify: " + err), 300) }
   render();
   if (room){ connectRoom(); keepAwake() }
