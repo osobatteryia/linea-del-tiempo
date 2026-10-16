@@ -111,6 +111,8 @@ details ol{margin:10px 0 0;padding-left:20px;display:flex;flex-direction:column;
 .mic.on{background:var(--bad);border-color:var(--bad);color:#fff;animation:pulse 1.2s ease-in-out infinite}
 #micNote:empty{display:none}
 .mystery.steal{background:repeating-linear-gradient(135deg,var(--gold) 0 12px,#e9ad1d 12px 24px);color:#2a1d00}
+.ghostcard{outline:3px dashed var(--ok);outline-offset:2px;opacity:.95}
+.wrongslot{border:2px dashed var(--bad);color:var(--bad);border-radius:12px;padding:8px 12px;font-weight:700;text-align:center}
 .mini{min-height:0;padding:4px 10px;font-size:.8rem}
 .pulse{animation:pulse 1.4s ease-in-out infinite}
 @keyframes pulse{50%{opacity:.45}}
@@ -733,6 +735,18 @@ function tlHTML(tl,{pick=false,sel=null,sel2=null,highlight=null}={}){
   }
   return h+"</div>";
 }
+// Muestra dónde iba la carta en la línea del jugador que falló, junto a lo que eligió
+function missHTML(tl, song, wrong){
+  const y = yr(song);
+  let ok = 0; while (ok < tl.length && yr(tl[ok]) <= y) ok++;
+  let h = '<div class="tl">';
+  for (let i = 0; i <= tl.length; i++){
+    if (i === wrong && i !== ok) h += `<div class="wrongslot">✗ Aquí la puso</div>`;
+    if (i === ok){ const [t,a] = song; h += `<div class="card ghostcard" style="background:${color(y)}"><span class="yr">${y}</span><span class="t">${esc(t)}</span><span class="a">✓ Aquí iba · ${esc(a)}</span></div>` }
+    if (i < tl.length) h += cardHTML(tl[i], false);
+  }
+  return h + "</div>";
+}
 function scoreHTML(){
   return `<div class="score">${st.players.map((p,i)=>`<div class="chip${i===st.cur?" on":""}">${esc(p.name)}${me===i?' <span class="you">tú</span>':""} <b>${p.tl.length}/${st.target}</b><span class="tok" aria-label="${p.tk} fichas">${"<i></i>".repeat(p.tk)}</span></div>`).join("")}</div>`;
 }
@@ -975,6 +989,7 @@ function render(){
         :st.res&&st.res.stolen?`<p class="muted">Como ${esc(st.players[st.stealer].name)} le robó la carta, no se puede dar la ficha a mano.</p>`
         :`<button class="gold" data-act="bonus" ${st.bonus||p.tk>=5?"disabled":""}>${st.bonus?"Ficha entregada":p.tk>=5?"Ya tiene 5 fichas":"Dar ficha igual (si estaba bien)"}</button>`}
     </section>
+    ${!r.ok?`<section style="display:flex;flex-direction:column;gap:10px"><span class="label">Dónde iba en la línea de ${esc(p.name)}</span>${missHTML(p.tl, st.song, st.slot)}</section>`:""}
     ${owner?`<section style="display:flex;flex-direction:column;gap:10px"><span class="label">Línea de ${esc(owner.name)}</span>${tlHTML(owner.tl,{highlight:st.song})}</section>`:""}
     <button class="primary" data-act="next">Siguiente turno</button>${foot}`;
     return;
