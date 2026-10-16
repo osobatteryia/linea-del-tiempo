@@ -455,8 +455,20 @@ async function hostPlayTurn(){
   const dev = await pickDevice();
   await unduck(dev);
   const ctx = playlistUri(st.playlist) || playlistUri(DEFAULT_PLAYLIST);
+  // Corta la canción anterior justo antes, para que no se mezcle con la nueva
+  try { await sp("PUT", "/me/player/pause?device_id=" + dev) } catch (e) {}
   await sp("PUT", "/me/player/play?device_id=" + dev, { context_uri: ctx, offset: { uri: t.uri }, position_ms: pos });
   ls.set("clipTrack:" + room, { uri: t.uri, name: t.name, artists: t.artists, date: t.date, turn: st.round + ":" + st.cur });
+  // Algunos celulares parten la canción desde el inicio e ignoran el punto pedido: se revisa y se corrige
+  if (pos){
+    for (let k = 0; k < 4; k++){
+      await wait(400);
+      let c = null; try { c = await sp("GET", "/me/player/currently-playing") } catch (e) {}
+      if (!c || !c.item || c.item.uri !== t.uri) continue;
+      if (Math.abs((c.progress_ms || 0) - pos) > 2500){ try { await sp("PUT", "/me/player/seek?position_ms=" + pos + "&device_id=" + dev) } catch (e) {} }
+      break;
+    }
+  }
   st.started = true;
   st.clipAt = len ? Date.now() : null;
   clearTimeout(clipTimer);
