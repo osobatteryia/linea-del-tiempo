@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0e1b21">
+<meta name="robots" content="noindex">
+<title>Banco de Pruebas · Línea del Tiempo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Figtree:wght@400;600;700&family=JetBrains+Mono:wght@700&display=swap">
+<style>
+/* Banco de pruebas: cuatro "celulares" del juego en una sola página. Vista de uno a la vez (pestañas) o los cuatro en cuadrícula. */
+:root{
+  --bg:#0e1b21; --surface:#162a33; --line:#24414d; --fg:#f4ede1; --muted:#9db3ad;
+  --accent:#ff5a3d; --gold:#ffc53d; --ok:#4fd18b; --bad:#ff6b8a;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --body:"Figtree",ui-sans-serif,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--body)}
+body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+header{display:flex;flex-direction:column;gap:8px;padding:10px max(12px,env(safe-area-inset-left,0px)) 8px max(12px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+h1{font-family:var(--display);font-weight:800;font-size:1.1rem;margin:0;letter-spacing:-.01em}
+.status{font-size:.78rem;color:var(--muted)}
+.status b{font-family:var(--mono);color:var(--fg);letter-spacing:.06em}
+.tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button,.tools button{font:inherit;font-weight:700;font-size:.85rem;border-radius:999px;padding:8px 12px;border:1.5px solid var(--line);background:var(--surface);color:var(--fg);white-space:nowrap;cursor:pointer;display:flex;align-items:center;gap:6px}
+.tabs button.on{border-color:var(--accent);background:color-mix(in oklab,var(--accent) 22%,var(--surface))}
+.tabs .turn{width:8px;height:8px;border-radius:50%;background:var(--gold);display:none}
+.tabs button.turnon .turn{display:block}
+.tools{display:flex;gap:6px}
+.tools button{padding:6px 10px;font-size:.78rem}
+button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+main{flex:1;position:relative;min-height:0}
+.dev{position:absolute;inset:0;visibility:hidden}
+.dev.on{visibility:visible}
+.dev iframe{width:100%;height:100%;border:0;display:block;background:var(--bg)}
+.dev .tag{display:none}
+/* Cuadrícula */
+main.grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6px;padding:6px}
+main.grid .dev{position:relative;inset:auto;visibility:visible;overflow:hidden;border:1.5px solid var(--line);border-radius:12px;min-height:0}
+main.grid .dev.turnon{border-color:var(--gold)}
+main.grid .dev iframe{position:absolute;top:0;left:0;width:390px;height:844px;transform-origin:0 0}
+main.grid .dev .tag{display:block;position:absolute;right:6px;bottom:6px;z-index:2;font-size:.7rem;font-weight:700;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:2px 8px;pointer-events:none}
+.hint{font-size:.78rem;color:var(--muted);margin:0}
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <h1>Banco de pruebas</h1>
+    <span class="status" id="status">Crea la sala en «Oso»</span>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <div class="top">
+    <p class="hint" id="hint">1) En «Oso» toca Crear sala nueva. Los otros 3 entran solos.</p>
+    <div class="tools">
+      <button id="grid">Ver los 4</button>
+      <button id="reset">Reiniciar</button>
+    </div>
+  </div>
+</header>
+<main id="main"></main>
+
+<script>
+const NAMES = ["Oso", "Ana", "Pipe", "Coni"];
+const main = document.getElementById("main"), tabs = document.getElementById("tabs");
+let active = 0, grid = false, room = null;
+
+const devs = NAMES.map((n, i) => {
+  const d = document.createElement("div"); d.className = "dev" + (i === 0 ? " on" : "");
+  const f = document.createElement("iframe");
+  f.title = "Celular de " + n;
+  f.setAttribute("allow", "microphone; autoplay; clipboard-write; screen-wake-lock");
+  const tag = document.createElement("span"); tag.className = "tag"; tag.textContent = n + (i === 0 ? " · anfitrión" : "");
+  d.append(f, tag); main.append(d);
+  const b = document.createElement("button");
+  b.innerHTML = `<span class="turn"></span>${n}${i === 0 ? " · anfitrión" : ""}`;
+  b.onclick = () => show(i);
+  tabs.append(b);
+  return { d, f, b };
+});
+
+function src(i, sala){
+  const q = new URLSearchParams({ perfil: String(i + 1), soy: String(i) });
+  if (i === 0) q.set("nombres", NAMES.join(","));
+  if (sala) q.set("sala", sala);
+  return "index.html?" + q.toString();
+}
+function show(i){
+  active = i;
+  if (grid) toggleGrid();
+  devs.forEach((x, k) => { x.d.classList.toggle("on", k === i); x.b.classList.toggle("on", k === i) });
+}
+function toggleGrid(){
+  grid = !grid;
+  main.classList.toggle("grid", grid);
+  document.getElementById("grid").textContent = grid ? "Ver uno" : "Ver los 4";
+  devs.forEach((x, k) => x.b.classList.toggle("on", !grid && k === active));
+  fit();
+}
+function fit(){
+  devs.forEach(x => {
+    if (!grid){ x.f.style.transform = ""; return }
+    const r = x.d.getBoundingClientRect();
+    const s = Math.min(r.width / 390, r.height / 844);
+    x.f.style.transform = `scale(${s})`;
+  });
+}
+addEventListener("resize", fit);
+document.getElementById("grid").onclick = toggleGrid;
+
+function start(){
+  room = null;
+  devs.forEach((x, i) => { x.f.src = i === 0 ? src(0) : "about:blank" });
+  document.getElementById("status").textContent = "Crea la sala en «Oso»";
+  document.getElementById("hint").textContent = "1) En «Oso» toca Crear sala nueva. Los otros 3 entran solos.";
+  show(0);
+}
+document.getElementById("reset").onclick = () => {
+  // Saca a Oso de la sala actual y vuelve a empezar
+  try { const w = devs[0].f.contentWindow; w.history.replaceState(null, "", src(0)) } catch (e) {}
+  start();
+};
+
+// Vigila al anfitrión: cuando crea la sala, conecta a los otros tres
+setInterval(() => {
+  let api = null; try { api = devs[0].f.contentWindow.__ldt } catch (e) {}
+  if (!api) return;
+  const r = api.room();
+  if (r && r !== room){
+    room = r;
+    devs.forEach((x, i) => { if (i > 0) x.f.src = src(i, r) });
+    document.getElementById("hint").textContent = "2) En «Oso» toca Empezar partida. Cambia de celular con las pestañas.";
+  }
+  if (!r && room){ room = null; devs.forEach((x, i) => { if (i > 0) x.f.src = "about:blank" }) }
+  const cur = api.cur(), phase = api.phase();
+  if (r && phase) document.getElementById("hint").textContent = "Cambia de celular con las pestañas. El punto amarillo marca de quién es el turno.";
+  document.getElementById("status").innerHTML = r ? `Sala <b>${r}</b>${phase ? " · " + ({turn:"turno",steal:"robo",reveal:"revelado",needyear:"falta año",win:"fin"}[phase] || phase) : " · sin empezar"}` : "Crea la sala en «Oso»";
+  devs.forEach((x, k) => { const t = r && cur === k && phase !== "win"; x.b.classList.toggle("turnon", t); x.d.classList.toggle("turnon", t) });
+}, 700);
+
+start();
+</script>
+</body>
+</html>

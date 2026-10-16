@@ -185,14 +185,25 @@ const DEFAULT_PLAYLIST = "https://open.spotify.com/playlist/4BX1DjvzqAT3GePXKGzy
 const BROKERS = ["wss://broker.emqx.io:8084/mqtt","wss://broker.hivemq.com:8884/mqtt"];
 const NS = "lineadeltiempo-oso-v1";
 const REDIRECT = location.origin + location.pathname;
+// Modo de prueba (prueba.html): cada "celular" simulado usa su propio almacenamiento
+const QS = new URLSearchParams(location.search);
+const PERFIL = QS.get("perfil"), SOY = QS.get("soy"), NOMBRES = QS.get("nombres");
+const STORE = NS + (PERFIL && PERFIL !== "1" ? ":p" + PERFIL : "");
+function selfUrl(sala){
+  const q = new URLSearchParams();
+  if (PERFIL) q.set("perfil", PERFIL);
+  if (SOY != null) q.set("soy", SOY);
+  if (sala) q.set("sala", sala);
+  const t = q.toString(); return REDIRECT + (t ? "?" + t : "");
+}
 const SCOPES = "user-read-playback-state user-modify-playback-state user-read-currently-playing";
 
 // ===== Utilidades =====
 const $app = () => document.getElementById("app");
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const ls = {
-  get(k, d = null) { try { const v = localStorage.getItem(NS + ":" + k); return v == null ? d : JSON.parse(v) } catch (e) { return d } },
-  set(k, v) { try { v == null ? localStorage.removeItem(NS + ":" + k) : localStorage.setItem(NS + ":" + k, JSON.stringify(v)) } catch (e) {} }
+  get(k, d = null) { try { const v = localStorage.getItem(STORE + ":" + k); return v == null ? d : JSON.parse(v) } catch (e) { return d } },
+  set(k, v) { try { v == null ? localStorage.removeItem(STORE + ":" + k) : localStorage.setItem(STORE + ":" + k, JSON.stringify(v)) } catch (e) {} }
 };
 const rid = () => Math.random().toString(36).slice(2, 10);
 const yr = e => e[2];
@@ -269,6 +280,7 @@ let st = null;            // estado compartido de la partida
 let received = false;     // ya llegó el estado de la sala
 let menuOpen = false, confirmReset = false, yearDraft = "", joinDraft = "";
 let setup = Object.assign({names:["Ana","Pipe","Coni"],target:10,filter:"all",tokens:2,src:"spotify",playlist:DEFAULT_PLAYLIST,clip:10}, ls.get("setup", {}));
+if (NOMBRES) setup.names = NOMBRES.split(",").map(x => x.trim()).filter(Boolean).slice(0, 10);
 let me = room ? ls.get("me:" + room) : null;
 let isHost = room ? !!ls.get("host:" + room) : false;
 let conn = "off";         // off | connecting | on | error
@@ -333,7 +345,7 @@ async function spotifyLogin(){
   const ch = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v)));
   ls.set("pkce", v);
   const q = new URLSearchParams({ response_type:"code", client_id: clientId(), scope: SCOPES, redirect_uri: REDIRECT, code_challenge_method:"S256", code_challenge: ch, state: room || "" });
-  location.href = "https://accounts.spotify.com/authorize?" + q;
+  (window.top || window).location.href = "https://accounts.spotify.com/authorize?" + q;
 }
 async function spotifyCallback(){
   const p = new URLSearchParams(location.search);
@@ -646,6 +658,7 @@ function render(){
     drawQR();
     return;
   }
+  if (me == null && SOY != null && st.players[+SOY]) setMe(+SOY);
   if (me == null && st.phase !== "win"){
     app.innerHTML = `${statusHTML()}<header class="hero"><h1>¿Quién eres?</h1><p class="muted">Elige tu nombre para ver tu línea de tiempo en este celular.</p></header>
       <div class="steals">${st.players.map((p,i)=>`<button class="ghost" data-act="iam" data-i="${i}">Soy ${esc(p.name)}</button>`).join("")}</div>
@@ -821,7 +834,7 @@ setInterval(() => {
 function goRoom(code, host){
   room = code; isHost = host; ls.set("host:" + code, host || null);
   me = ls.get("me:" + code);
-  history.replaceState(null, "", REDIRECT + "?sala=" + code);
+  history.replaceState(null, "", selfUrl(code));
   connectRoom(); keepAwake();
 }
 document.addEventListener("click", e => {
@@ -832,7 +845,7 @@ document.addEventListener("click", e => {
   switch (act){
     case "create": { const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let c = ""; for (let k = 0; k < 4; k++) c += abc[Math.floor(Math.random() * abc.length)]; goRoom(c, true); return }
     case "join": { const c = joinDraft.toUpperCase().replace(/[^A-Z0-9]/g, ""); if (c.length < 3){ document.getElementById("join")?.focus(); return } goRoom(c, false); return }
-    case "leave": if (client) client.end(true); client = null; room = null; st = null; received = false; menuOpen = false; conn = "off"; history.replaceState(null, "", REDIRECT); render(); return;
+    case "leave": if (client) client.end(true); client = null; room = null; st = null; received = false; menuOpen = false; conn = "off"; history.replaceState(null, "", selfUrl(null)); render(); return;
     case "copy": { const url = REDIRECT + "?sala=" + room; (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => { el.textContent = "Link copiado" }).catch(() => { el.textContent = url }); return }
     case "invite": showInvite = !showInvite; render(); return;
     case "saveCid": { const v = (document.getElementById("cid")?.value || "").trim(); if (v){ ls.set("spotifyClientId", v); render() } return }
@@ -895,6 +908,9 @@ document.addEventListener("change", e => {
   ls.set("setup", setup);
 });
 document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "join") document.querySelector('[data-act="join"]')?.click() });
+
+// Para la página de pruebas
+window.__ldt = { room: () => room, host: () => isHost, phase: () => st && st.phase, cur: () => st ? st.cur : null, conn: () => conn };
 
 // ===== Inicio =====
 (async () => {
