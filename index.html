@@ -106,6 +106,7 @@ details ol{margin:10px 0 0;padding-left:20px;display:flex;flex-direction:column;
 .timer .bar{position:absolute;inset:0 auto 0 0;background:color-mix(in oklab,var(--gold) 35%,transparent);width:100%;transition:width .25s linear}
 .timer.low .bar{background:color-mix(in oklab,var(--bad) 45%,transparent)}
 .timer span{position:relative;font-family:var(--mono);font-weight:700;font-size:1.1rem}
+.big{font-size:1.2rem;min-height:64px;width:100%}
 .mini{min-height:0;padding:4px 10px;font-size:.8rem}
 .pulse{animation:pulse 1.4s ease-in-out infinite}
 @keyframes pulse{50%{opacity:.45}}
@@ -411,9 +412,9 @@ async function hostCheck(){
   if (!tok()) return;
   const req = st.req; handledReq = req.id; hostBusy = true;
   try {
-    if (req.type === "start" || req.type === "next"){
+    if (req.type === "start" || req.type === "next" || req.type === "play"){
       const prev = await currentUri();
-      if (req.type === "start") await hostStart(); else await hostNext();
+      if (req.type === "start" || !st.started){ await hostStart(); st.started = true } else await hostNext();
       await hostClip(prev);
       st.heard = true; st.msg = null;
     }
@@ -441,8 +442,7 @@ function startGame(){
   const src = setup.src;
   st = { phase:"turn", src, playlist: setup.playlist, players: names.map(n => ({ name:n, tl:[card(pool.pop())], tk: setup.tokens })), cur:0, deck: pool,
     song: src === "spotify" ? null : card(pool.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false,
-    target: setup.target, round:1, used:[], lastUri:null, req:null, msg:null, pending:null, clip: src === "spotify" ? (setup.clip || 0) : 0, clipAt:null };
-  if (src === "spotify") request("start");
+    target: setup.target, round:1, used:[], lastUri:null, req:null, msg:null, pending:null, clip: src === "spotify" ? (setup.clip || 0) : 0, clipAt:null, started:false };
   if (me != null && me !== "todos") setMe(null);
 }
 function nextTurn(){
@@ -450,7 +450,6 @@ function nextTurn(){
   if (win || (!spot() && !st.deck.length)){ st.phase = "win"; return }
   st.cur = (st.cur + 1) % st.players.length; if (st.cur === 0) st.round++;
   Object.assign(st, { phase:"turn", song: spot() ? null : card(st.deck.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false, pending:null, guess:null, guessRes:null, autoBonus:false, clipAt:null, timeUp:false });
-  if (spot()) request("next");
 }
 function reveal(){
   const p = st.players[st.cur], y = yr(st.song);
@@ -619,9 +618,17 @@ function render(){
     const guessing = allHere() || me === st.cur;
     let msg, extra = "";
     if (spot()){
-      msg = st.heard ? (guessing ? "Escucha y elige dónde va." : `${esc(p.name)} está escuchando y eligiendo.`) : "Preparando la canción…";
-      if (st.clip && st.clipAt) extra += `<div class="timer" id="timer"><div class="bar" id="timerBar"></div><span id="timerTxt"></span></div>`;
-      extra += `<div class="row"><button class="ghost" data-act="otra" ${st.req?"disabled":""}>${st.heard?"Otra canción":"Poner canción"}</button></div>`;
+      if (st.heard){
+        msg = guessing ? "Escucha y elige dónde va." : `${esc(p.name)} está escuchando y eligiendo.`;
+        if (st.clip && st.clipAt) extra += `<div class="timer" id="timer"><div class="bar" id="timerBar"></div><span id="timerTxt"></span></div>`;
+      } else if (st.req){
+        msg = "Preparando la canción…";
+      } else if (guessing){
+        msg = st.clip ? `Cuando estés listo, toca el botón. Sonará un fragmento y tendrás ${st.clip} segundos para responder.` : "Cuando estés listo, toca el botón para escuchar la canción.";
+        extra += `<button class="primary big" data-act="play">▶ Empezar mi turno</button>`;
+      } else {
+        msg = `Esperando que ${esc(p.name)} toque Empezar.`;
+      }
     } else {
       const dj = allHere() || me !== st.cur;
       msg = me === st.cur ? "Otro jugador pone la canción desde su celular." : allHere() ? "Pásale el celular a otro jugador para que ponga la canción." : "Uno de ustedes pone la canción. No la muestres.";
@@ -638,13 +645,13 @@ function render(){
     ${msgHTML()}
     <section style="display:flex;flex-direction:column;gap:10px">
       <span class="label">${guessing?(st.slot==null?"Toca dónde crees que va":"Tu elección"):`Línea de ${esc(p.name)}${st.slot==null?" · eligiendo…":""}`}</span>
-      ${tlHTML(p.tl,{pick:guessing,sel:st.slot})}
+      ${tlHTML(p.tl,{pick:guessing&&(!spot()||st.heard),sel:st.slot})}
     </section>
-    ${guessing?(()=>{const k=st.round+":"+st.cur;if(guessDraft.k!==k)guessDraft={t:"",a:"",k};return `<section class="panel"><span class="label">¿Sabes cuál es? (opcional)</span>
+    ${guessing&&(!spot()||st.heard)?(()=>{const k=st.round+":"+st.cur;if(guessDraft.k!==k)guessDraft={t:"",a:"",k};return `<section class="panel"><span class="label">¿Sabes cuál es? (opcional)</span>
       <input id="gTitle" data-act="gTitle" placeholder="Nombre de la canción" autocomplete="off" value="${esc(guessDraft.t)}">
       <input id="gArtist" data-act="gArtist" placeholder="Artista o banda" autocomplete="off" value="${esc(guessDraft.a)}">
       <p class="muted" style="font-size:.85rem">Si aciertas canción y artista, ganas 1 ficha. No importan tildes ni mayúsculas.</p></section>`})():""}
-    ${guessing?`<div class="row">
+    ${guessing&&(!spot()||st.heard)?`<div class="row">
       <button class="primary" data-act="confirm" ${st.slot==null?"disabled":""}>Confirmar posición</button>
       <button class="ghost" data-act="skip" ${p.tk<1||st.req?"disabled":""}>Saltar canción (1 ficha)</button>
     </div>`:""}${foot}`;
@@ -777,9 +784,10 @@ document.addEventListener("click", e => {
       } else return;
       break;
     case "confirm": if (st.slot == null) return; st.timeUp = false; st.phase = "steal"; st.robando = null; st.guess = { t: guessDraft.t.trim().slice(0,80), a: guessDraft.a.trim().slice(0,80) }; break;
-    case "otra": if (spot()){ request("next"); st.heard = false } break;
+    case "otra": if (spot()){ request("play"); st.heard = false } break;
+    case "play": if (spot() && st.phase === "turn" && !st.req){ request("play"); st.heard = false } else return; break;
     case "skip": st.players[st.cur].tk--; st.slot = null; st.heard = false;
-      if (spot()) request("next"); else { const n = st.deck.pop(); if (n == null) st.phase = "win"; else st.song = card(n) }
+      if (spot()) request("play"); else { const n = st.deck.pop(); if (n == null) st.phase = "win"; else st.song = card(n) }
       break;
     case "pickStealer": if (st.robando == null) st.robando = i; break;
     case "cancelSteal": st.robando = null; break;
