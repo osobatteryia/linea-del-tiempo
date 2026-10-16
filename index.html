@@ -107,6 +107,9 @@ details ol{margin:10px 0 0;padding-left:20px;display:flex;flex-direction:column;
 .timer.low .bar{background:color-mix(in oklab,var(--bad) 45%,transparent)}
 .timer span{position:relative;font-family:var(--mono);font-weight:700;font-size:1.1rem}
 .big{font-size:1.2rem;min-height:64px;width:100%}
+.mic{flex:0 0 auto;min-height:0;width:52px;padding:0}
+.mic.on{background:var(--bad);border-color:var(--bad);color:#fff;animation:pulse 1.2s ease-in-out infinite}
+#micNote:empty{display:none}
 .mini{min-height:0;padding:4px 10px;font-size:.8rem}
 .pulse{animation:pulse 1.4s ease-in-out infinite}
 @keyframes pulse{50%{opacity:.45}}
@@ -221,6 +224,42 @@ function guessArtist(g,a){
   return close(g,a)||parts.some(x=>close(g,x));
 }
 let guessDraft={t:"",a:"",k:""};
+
+// ===== Dictado por voz =====
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let mic = null, micField = null, micNote = "";
+const MIC_SVG = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+function micBtn(f, label){
+  if (!SR) return "";
+  return `<button class="ghost mic${micField===f?" on":""}" data-act="mic" data-f="${f}" aria-label="${label}" title="${label}">${MIC_SVG}</button>`;
+}
+function stopMic(){ if (mic){ try { mic.stop() } catch (e) {} } }
+function startMic(f){
+  if (mic){ const same = micField === f; stopMic(); if (same) return }
+  const id = f === "t" ? "gTitle" : "gArtist";
+  const r = new SR();
+  r.lang = "es-CL"; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+  mic = r; micField = f; micNote = "Escuchando… di el nombre y espera un segundo.";
+  r.onresult = ev => {
+    let txt = ""; for (const res of ev.results) txt += res[0].transcript;
+    txt = txt.replace(/[.¿?¡!]+$/,"").trim();
+    guessDraft[f] = txt;
+    const el = document.getElementById(id); if (el) el.value = txt;
+  };
+  r.onerror = ev => {
+    micNote = ev.error === "not-allowed" || ev.error === "service-not-allowed"
+      ? "El navegador no dio permiso para usar el micrófono. Revisa los permisos o escribe con el teclado."
+      : ev.error === "no-speech" ? "No te escuché. Toca el micrófono y vuelve a intentar." : "No se pudo dictar. Intenta de nuevo o escribe.";
+  };
+  r.onend = () => {
+    if (mic !== r) return;
+    mic = null; micField = null; if (micNote.startsWith("Escuchando")) micNote = "";
+    document.querySelectorAll(".mic.on").forEach(b => b.classList.remove("on"));
+    const n = document.getElementById("micNote"); if (n) n.textContent = micNote;
+  };
+  try { r.start() } catch (e) { mic = null; micField = null; micNote = "No se pudo usar el micrófono." }
+  render();
+}
 
 // ===== Estado =====
 const myId = ls.get("clientId") || (() => { const v = rid(); ls.set("clientId", v); return v })();
@@ -648,8 +687,9 @@ function render(){
       ${tlHTML(p.tl,{pick:guessing&&(!spot()||st.heard),sel:st.slot})}
     </section>
     ${guessing&&(!spot()||st.heard)?(()=>{const k=st.round+":"+st.cur;if(guessDraft.k!==k)guessDraft={t:"",a:"",k};return `<section class="panel"><span class="label">¿Sabes cuál es? (opcional)</span>
-      <input id="gTitle" data-act="gTitle" placeholder="Nombre de la canción" autocomplete="off" value="${esc(guessDraft.t)}">
-      <input id="gArtist" data-act="gArtist" placeholder="Artista o banda" autocomplete="off" value="${esc(guessDraft.a)}">
+      <div class="prow"><input id="gTitle" data-act="gTitle" placeholder="Nombre de la canción" autocomplete="off" value="${esc(guessDraft.t)}">${micBtn("t","Dictar canción")}</div>
+      <div class="prow"><input id="gArtist" data-act="gArtist" placeholder="Artista o banda" autocomplete="off" value="${esc(guessDraft.a)}">${micBtn("a","Dictar artista")}</div>
+      <p class="muted" id="micNote" style="font-size:.85rem">${esc(micNote)}</p>
       <p class="muted" style="font-size:.85rem">Si aciertas canción y artista, ganas 1 ficha. No importan tildes ni mayúsculas.</p></section>`})():""}
     ${guessing&&(!spot()||st.heard)?`<div class="row">
       <button class="primary" data-act="confirm" ${st.slot==null?"disabled":""}>Confirmar posición</button>
@@ -744,7 +784,7 @@ setInterval(() => {
   // Al acabarse el tiempo, se entrega lo que haya elegido el jugador
   if ((left <= 0 && guessingHere) || (left <= -4000 && isHost)){
     if (guessingHere) st.guess = { t: guessDraft.t.trim().slice(0,80), a: guessDraft.a.trim().slice(0,80) };
-    st.timeUp = true; st.phase = "steal"; st.robando = null;
+    stopMic(); st.timeUp = true; st.phase = "steal"; st.robando = null;
     commit(); render(); window.scrollTo({ top:0 });
   }
 }, 250);
@@ -783,8 +823,9 @@ document.addEventListener("click", e => {
         if (spot()) request("reveal"); else reveal();
       } else return;
       break;
-    case "confirm": if (st.slot == null) return; st.timeUp = false; st.phase = "steal"; st.robando = null; st.guess = { t: guessDraft.t.trim().slice(0,80), a: guessDraft.a.trim().slice(0,80) }; break;
+    case "confirm": if (st.slot == null) return; stopMic(); st.timeUp = false; st.phase = "steal"; st.robando = null; st.guess = { t: guessDraft.t.trim().slice(0,80), a: guessDraft.a.trim().slice(0,80) }; break;
     case "otra": if (spot()){ request("play"); st.heard = false } break;
+    case "mic": startMic(el.dataset.f); return;
     case "play": if (spot() && st.phase === "turn" && !st.req){ request("play"); st.heard = false } else return; break;
     case "skip": st.players[st.cur].tk--; st.slot = null; st.heard = false;
       if (spot()) request("play"); else { const n = st.deck.pop(); if (n == null) st.phase = "win"; else st.song = card(n) }
