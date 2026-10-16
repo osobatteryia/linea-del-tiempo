@@ -102,6 +102,10 @@ details ol{margin:10px 0 0;padding-left:20px;display:flex;flex-direction:column;
 .guess .hit{border-color:var(--ok);color:var(--ok)}
 .guess .miss{border-color:var(--bad);color:var(--fg)}
 .guess .miss span{color:var(--bad)}
+.timer{position:relative;height:44px;border-radius:12px;background:var(--bg);border:1px solid var(--line);overflow:hidden;display:flex;align-items:center;justify-content:center}
+.timer .bar{position:absolute;inset:0 auto 0 0;background:color-mix(in oklab,var(--gold) 35%,transparent);width:100%;transition:width .25s linear}
+.timer.low .bar{background:color-mix(in oklab,var(--bad) 45%,transparent)}
+.timer span{position:relative;font-family:var(--mono);font-weight:700;font-size:1.1rem}
 .mini{min-height:0;padding:4px 10px;font-size:.8rem}
 .pulse{animation:pulse 1.4s ease-in-out infinite}
 @keyframes pulse{50%{opacity:.45}}
@@ -224,7 +228,7 @@ room = room ? room.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) : null;
 let st = null;            // estado compartido de la partida
 let received = false;     // ya llegó el estado de la sala
 let menuOpen = false, confirmReset = false, yearDraft = "", joinDraft = "";
-let setup = Object.assign({names:["Ana","Pipe","Coni"],target:10,filter:"all",tokens:2,src:"spotify",playlist:DEFAULT_PLAYLIST}, ls.get("setup", {}));
+let setup = Object.assign({names:["Ana","Pipe","Coni"],target:10,filter:"all",tokens:2,src:"spotify",playlist:DEFAULT_PLAYLIST,clip:10}, ls.get("setup", {}));
 let me = room ? ls.get("me:" + room) : null;
 let isHost = room ? !!ls.get("host:" + room) : false;
 let conn = "off";         // off | connecting | on | error
@@ -358,6 +362,35 @@ async function hostNext(){
   try { await sp("POST", "/me/player/next") }
   catch (e) { await hostStart() }
 }
+// Pone la canción en un punto al azar y la pausa cuando se acaba el tiempo
+let clipTimer = null;
+async function hostClip(prevUri){
+  st.clipAt = null;
+  let it = null;
+  for (let k = 0; k < 8; k++){
+    await wait(500);
+    const cur = await sp("GET", "/me/player/currently-playing");
+    it = cur && cur.item;
+    if (it && it.uri !== prevUri) break;
+  }
+  const len = st.clip || 0;
+  if (len && it && it.duration_ms){
+    const d = it.duration_ms, span = len * 1000;
+    const from = Math.floor(d * 0.15), to = Math.max(from, Math.floor(d * 0.75) - span);
+    const pos = from + Math.floor(Math.random() * (to - from + 1));
+    try { await sp("PUT", "/me/player/seek?position_ms=" + pos) } catch (e) {}
+  }
+  try { await sp("PUT", "/me/player/play") } catch (e) {}
+  if (len){
+    st.clipAt = Date.now();
+    const turnKey = st.round + ":" + st.cur + ":" + st.clipAt;
+    clearTimeout(clipTimer);
+    clipTimer = setTimeout(() => {
+      if (st && st.round + ":" + st.cur + ":" + st.clipAt === turnKey) sp("PUT", "/me/player/pause").catch(() => {});
+    }, len * 1000);
+  }
+}
+async function currentUri(){ try { const c = await sp("GET", "/me/player/currently-playing"); return c && c.item && c.item.uri } catch (e) { return null } }
 async function hostReveal(force){
   const cur = await sp("GET", "/me/player/currently-playing");
   const it = cur && cur.item;
@@ -378,10 +411,14 @@ async function hostCheck(){
   if (!tok()) return;
   const req = st.req; handledReq = req.id; hostBusy = true;
   try {
-    if (req.type === "start") await hostStart();
-    if (req.type === "next") await hostNext();
-    if (req.type === "start" || req.type === "next"){ st.heard = true; st.msg = null }
-    if (req.type === "reveal") { st.msg = null; await hostReveal(req.force) }
+    if (req.type === "start" || req.type === "next"){
+      const prev = await currentUri();
+      if (req.type === "start") await hostStart(); else await hostNext();
+      await hostClip(prev);
+      st.heard = true; st.msg = null;
+    }
+    if (req.type === "reveal") { st.msg = null; clearTimeout(clipTimer); await hostReveal(req.force);
+      try { await sp("PUT", "/me/player/play") } catch (e) {} }
   } catch (e) {
     st.msg = { t: (e && e.msg) || "Algo falló al hablar con Spotify. Intenta de nuevo.", again: !!(e && e.again) };
   } finally {
@@ -389,7 +426,7 @@ async function hostCheck(){
     hostBusy = false; commit(); render();
   }
 }
-function request(type, extra){ st.req = Object.assign({ type, id: rid() }, extra || {}); st.msg = null }
+function request(type, extra){ st.req = Object.assign({ type, id: rid() }, extra || {}); st.msg = null; if (type !== "reveal") st.clipAt = null }
 
 // Mantener la pantalla del anfitrión encendida
 let wake = null;
@@ -404,7 +441,7 @@ function startGame(){
   const src = setup.src;
   st = { phase:"turn", src, playlist: setup.playlist, players: names.map(n => ({ name:n, tl:[card(pool.pop())], tk: setup.tokens })), cur:0, deck: pool,
     song: src === "spotify" ? null : card(pool.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false,
-    target: setup.target, round:1, used:[], lastUri:null, req:null, msg:null, pending:null };
+    target: setup.target, round:1, used:[], lastUri:null, req:null, msg:null, pending:null, clip: src === "spotify" ? (setup.clip || 0) : 0, clipAt:null };
   if (src === "spotify") request("start");
   if (me != null && me !== "todos") setMe(null);
 }
@@ -412,12 +449,12 @@ function nextTurn(){
   const win = st.players.find(p => p.tl.length >= st.target);
   if (win || (!spot() && !st.deck.length)){ st.phase = "win"; return }
   st.cur = (st.cur + 1) % st.players.length; if (st.cur === 0) st.round++;
-  Object.assign(st, { phase:"turn", song: spot() ? null : card(st.deck.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false, pending:null, guess:null, guessRes:null, autoBonus:false });
+  Object.assign(st, { phase:"turn", song: spot() ? null : card(st.deck.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false, pending:null, guess:null, guessRes:null, autoBonus:false, clipAt:null, timeUp:false });
   if (spot()) request("next");
 }
 function reveal(){
   const p = st.players[st.cur], y = yr(st.song);
-  const ok = fits(p.tl, st.slot, y);
+  const ok = st.slot != null && fits(p.tl, st.slot, y);
   let stolen = false;
   if (!ok && st.stealer != null && fits(p.tl, st.sslot, y)) stolen = true;
   const owner = ok ? st.cur : stolen ? st.stealer : null;
@@ -522,7 +559,9 @@ function render(){
           <option value="manual" ${setup.src==="manual"?"selected":""}>Un DJ busca cada canción</option>
         </select></label>
       ${setup.src==="spotify"?`<label class="field"><span class="label">Playlist de Spotify (link)</span><input id="pl" data-act="playlist" value="${esc(setup.playlist)}"></label>
-        <p class="muted" style="font-size:.88rem">La app pone la playlist en aleatorio, pasa a la siguiente canción en cada turno y lee cuál suena al revelar.</p>`
+        <label class="field"><span class="label">Tiempo para responder</span>
+          <select id="clip" data-act="clip">${[[10,"10 segundos"],[15,"15 segundos"],[20,"20 segundos"],[30,"30 segundos"],[0,"Sin límite"]].map(([v,t])=>`<option value="${v}" ${v==setup.clip?"selected":""}>${t}</option>`).join("")}</select></label>
+        <p class="muted" style="font-size:.88rem">${setup.clip?`En cada turno suena un fragmento de ${setup.clip} segundos de una parte al azar de la canción. Ese es el tiempo para responder.`:"La canción suena completa y no hay límite de tiempo."}</p>`
       :`<label class="field"><span class="label">Canciones</span>
         <select id="filter" data-act="filter">
           <option value="all" ${setup.filter==="all"?"selected":""}>Todas (${S.length})</option>
@@ -580,8 +619,9 @@ function render(){
     const guessing = allHere() || me === st.cur;
     let msg, extra = "";
     if (spot()){
-      msg = st.heard ? (guessing ? "Escucha y elige dónde va." : `${esc(p.name)} está escuchando y eligiendo.`) : "Esperando que Spotify empiece…";
-      extra = `<div class="row"><button class="ghost" data-act="otra" ${st.req?"disabled":""}>${st.heard?"Otra canción":"Poner canción"}</button></div>`;
+      msg = st.heard ? (guessing ? "Escucha y elige dónde va." : `${esc(p.name)} está escuchando y eligiendo.`) : "Preparando la canción…";
+      if (st.clip && st.clipAt) extra += `<div class="timer" id="timer"><div class="bar" id="timerBar"></div><span id="timerTxt"></span></div>`;
+      extra += `<div class="row"><button class="ghost" data-act="otra" ${st.req?"disabled":""}>${st.heard?"Otra canción":"Poner canción"}</button></div>`;
     } else {
       const dj = allHere() || me !== st.cur;
       msg = me === st.cur ? "Otro jugador pone la canción desde su celular." : allHere() ? "Pásale el celular a otro jugador para que ponga la canción." : "Uno de ustedes pone la canción. No la muestres.";
@@ -627,6 +667,7 @@ function render(){
     else if (me === st.cur) stealUI = `<p class="muted">Los demás pueden robar desde su celular.</p>`;
     else stealUI = st.players[me].tk > 0 ? `<button class="gold" data-act="pickStealer" data-i="${me}">Robar (1 ficha)</button>` : `<p class="muted">No tienes fichas para robar.</p>`;
     app.innerHTML = `${head}
+    ${st.timeUp&&st.slot==null?`<div class="banner">Se acabó el tiempo y ${esc(p.name)} no eligió posición: si nadie roba, la carta se pierde.</div>`:""}
     <section class="panel"><span class="label">Antes de revelar</span><h2>¿Alguien quiere robar?</h2>
       <p class="muted">Cuesta 1 ficha. Si ${esc(p.name)} falla y el que roba acierta, se queda con la carta.</p>
       <div class="steals">${stealUI}</div>
@@ -680,6 +721,27 @@ function render(){
 let showInvite = false;
 let reqSeen = { id: null, t: 0 };
 
+// ===== Cuenta regresiva (actualiza solo el contador, sin redibujar la pantalla) =====
+function timeLeft(){ return st && st.clip && st.clipAt ? st.clipAt + st.clip * 1000 - Date.now() : null }
+setInterval(() => {
+  if (!st || st.phase !== "turn" || menuOpen) return;
+  const left = timeLeft(); if (left == null) return;
+  const t = document.getElementById("timer");
+  if (t){
+    const sec = Math.max(0, Math.ceil(left / 1000));
+    document.getElementById("timerTxt").textContent = sec > 0 ? sec + " s" : "¡Tiempo!";
+    document.getElementById("timerBar").style.width = Math.max(0, Math.min(100, left / (st.clip * 10))) + "%";
+    t.classList.toggle("low", sec <= 3);
+  }
+  const guessingHere = allHere() || me === st.cur;
+  // Al acabarse el tiempo, se entrega lo que haya elegido el jugador
+  if ((left <= 0 && guessingHere) || (left <= -4000 && isHost)){
+    if (guessingHere) st.guess = { t: guessDraft.t.trim().slice(0,80), a: guessDraft.a.trim().slice(0,80) };
+    st.timeUp = true; st.phase = "steal"; st.robando = null;
+    commit(); render(); window.scrollTo({ top:0 });
+  }
+}, 250);
+
 // ===== Acciones =====
 function goRoom(code, host){
   room = code; isHost = host; ls.set("host:" + code, host || null);
@@ -714,7 +776,7 @@ document.addEventListener("click", e => {
         if (spot()) request("reveal"); else reveal();
       } else return;
       break;
-    case "confirm": st.phase = "steal"; st.robando = null; st.guess = { t: guessDraft.t.trim().slice(0,80), a: guessDraft.a.trim().slice(0,80) }; break;
+    case "confirm": if (st.slot == null) return; st.timeUp = false; st.phase = "steal"; st.robando = null; st.guess = { t: guessDraft.t.trim().slice(0,80), a: guessDraft.a.trim().slice(0,80) }; break;
     case "otra": if (spot()){ request("next"); st.heard = false } break;
     case "skip": st.players[st.cur].tk--; st.slot = null; st.heard = false;
       if (spot()) request("next"); else { const n = st.deck.pop(); if (n == null) st.phase = "win"; else st.song = card(n) }
@@ -751,6 +813,7 @@ document.addEventListener("change", e => {
   if (a === "target") setup.target = +e.target.value;
   if (a === "tokens") setup.tokens = +e.target.value;
   if (a === "filter") setup.filter = e.target.value;
+  if (a === "clip"){ setup.clip = +e.target.value; ls.set("setup", setup); render(); return }
   if (a === "src"){ setup.src = e.target.value; ls.set("setup", setup); render(); return }
   ls.set("setup", setup);
 });
