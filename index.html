@@ -448,7 +448,7 @@ async function hostPlayTurn(){
   const t = pool[Math.floor(Math.random() * pool.length)];
   const len = st.clip || 0;
   let pos = 0;
-  if (len && t.ms){
+  if (len && t.ms && (st.part || "random") === "random"){
     const from = Math.floor(t.ms * 0.15), to = Math.max(from, Math.floor(t.ms * 0.75) - len * 1000);
     pos = from + Math.floor(Math.random() * (to - from + 1));
   }
@@ -457,7 +457,9 @@ async function hostPlayTurn(){
   const ctx = playlistUri(st.playlist) || playlistUri(DEFAULT_PLAYLIST);
   // Corta la canción anterior justo antes, para que no se mezcle con la nueva
   try { await sp("PUT", "/me/player/pause?device_id=" + dev) } catch (e) {}
-  await sp("PUT", "/me/player/play?device_id=" + dev, { context_uri: ctx, offset: { uri: t.uri }, position_ms: pos });
+  // Se manda la canción como lista (la elegida primero y luego las demás al azar): así Spotify respeta mejor el punto de inicio
+  const rest = shuffle(tracks.filter(x => x.uri !== t.uri).map(x => x.uri)).slice(0, 60);
+  await sp("PUT", "/me/player/play?device_id=" + dev, { uris: [t.uri, ...rest], position_ms: pos });
   ls.set("clipTrack:" + room, { uri: t.uri, name: t.name, artists: t.artists, date: t.date, turn: st.round + ":" + st.cur });
   // Algunos celulares parten la canción desde el inicio e ignoran el punto pedido: se revisa y se corrige
   if (pos){
@@ -615,7 +617,7 @@ function startGame(){
   const src = setup.src;
   st = { phase:"turn", src, playlist: setup.playlist, players: names.map(n => ({ name:n, tl:[card(pool.pop())], tk: setup.tokens })), cur:0, deck: pool,
     song: src === "spotify" ? null : card(pool.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false,
-    target: setup.target, round:1, used:[], lastUri:null, req:null, msg:null, pending:null, clip: src === "spotify" ? (setup.clip || 0) : 0, clipAt:null, started:false, after: setup.after || "duck" };
+    target: setup.target, round:1, used:[], lastUri:null, req:null, msg:null, pending:null, clip: src === "spotify" ? (setup.clip || 0) : 0, clipAt:null, started:false, after: setup.after || "duck", part: setup.part || "random" };
   if (me != null && me !== "todos") setMe(null);
 }
 function nextTurn(){
@@ -737,10 +739,12 @@ function render(){
       ${setup.src==="spotify"?`<label class="field"><span class="label">Playlist de Spotify (link)</span><input id="pl" data-act="playlist" value="${esc(setup.playlist)}"></label>
         <label class="field"><span class="label">Tiempo para responder</span>
           <select id="clip" data-act="clip">${[[10,"10 segundos"],[15,"15 segundos"],[20,"20 segundos"],[30,"30 segundos"],[0,"Sin límite"]].map(([v,t])=>`<option value="${v}" ${v==setup.clip?"selected":""}>${t}</option>`).join("")}</select></label>
-        ${setup.clip?`<label class="field"><span class="label">Al terminar el tiempo</span>
+        ${setup.clip?`<label class="field"><span class="label">Parte de la canción</span>
+          <select id="part" data-act="part">${[["random","Una parte al azar"],["start","Desde el comienzo"]].map(([v,t])=>`<option value="${v}" ${v===(setup.part||"random")?"selected":""}>${t}</option>`).join("")}</select></label>
+          <label class="field"><span class="label">Al terminar el tiempo</span>
           <select id="after" data-act="after">${[["duck","Bajar el volumen a la mitad"],["none","Seguir sonando igual"],["pause","Pausar la música"]].map(([v,t])=>`<option value="${v}" ${v===(setup.after||"duck")?"selected":""}>${t}</option>`).join("")}</select></label>
           ${(setup.after||"duck")==="pause"?`<p class="muted" style="font-size:.85rem">Pausar solo funciona bien si Spotify queda abierto en pantalla en otro celular. En iPhone, Spotify en pausa y en segundo plano se desconecta.</p>`:""}`:""}
-        <p class="muted" style="font-size:.88rem">${setup.clip?`En cada turno suena un fragmento de ${setup.clip} segundos de una parte al azar de la canción. Ese es el tiempo para responder.`:"La canción suena completa y no hay límite de tiempo."}</p>`
+        <p class="muted" style="font-size:.88rem">${setup.clip?`En cada turno suena un fragmento de ${setup.clip} segundos ${(setup.part||"random")==="start"?"desde el comienzo":"de una parte al azar"} de la canción. Ese es el tiempo para responder.`:"La canción suena completa y no hay límite de tiempo."}</p>`
       :`<label class="field"><span class="label">Canciones</span>
         <select id="filter" data-act="filter">
           <option value="all" ${setup.filter==="all"?"selected":""}>Todas (${S.length})</option>
@@ -1005,6 +1009,7 @@ document.addEventListener("change", e => {
   if (a === "target") setup.target = +e.target.value;
   if (a === "tokens") setup.tokens = +e.target.value;
   if (a === "filter") setup.filter = e.target.value;
+  if (a === "part"){ setup.part = e.target.value; ls.set("setup", setup); render(); return }
   if (a === "after"){ setup.after = e.target.value; ls.set("setup", setup); render(); return }
   if (a === "clip"){ setup.clip = +e.target.value; ls.set("setup", setup); render(); return }
   if (a === "src"){ setup.src = e.target.value; ls.set("setup", setup); render(); return }
