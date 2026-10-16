@@ -110,6 +110,7 @@ details ol{margin:10px 0 0;padding-left:20px;display:flex;flex-direction:column;
 .mic{flex:0 0 auto;min-height:0;width:52px;padding:0}
 .mic.on{background:var(--bad);border-color:var(--bad);color:#fff;animation:pulse 1.2s ease-in-out infinite}
 #micNote:empty{display:none}
+.mystery.steal{background:repeating-linear-gradient(135deg,var(--gold) 0 12px,#e9ad1d 12px 24px);color:#2a1d00}
 .mini{min-height:0;padding:4px 10px;font-size:.8rem}
 .pulse{animation:pulse 1.4s ease-in-out infinite}
 @keyframes pulse{50%{opacity:.45}}
@@ -439,6 +440,28 @@ async function loadPlaylist(){
   plCache = { id, tracks: out };
   return out;
 }
+async function loadPausedAt(dev, t, pos){
+  try {
+    await sp("POST", "/me/player/queue?uri=" + encodeURIComponent(t.uri) + "&device_id=" + dev);
+    await wait(250);
+    await sp("POST", "/me/player/next?device_id=" + dev);
+    let ok = false;
+    for (let k = 0; k < 8; k++){
+      await wait(300);
+      const c = await sp("GET", "/me/player/currently-playing");
+      if (c && c.item && c.item.uri === t.uri){
+        // Si Spotify ya empezó a sonar, se pausa al tiro
+        if (c.is_playing) { try { await sp("PUT", "/me/player/pause?device_id=" + dev) } catch (e) {} }
+        ok = true; break;
+      }
+    }
+    if (!ok) return false;
+    await sp("PUT", "/me/player/seek?position_ms=" + pos + "&device_id=" + dev);
+    await wait(250);
+    await sp("PUT", "/me/player/play?device_id=" + dev);
+    return true;
+  } catch (e) { return false }
+}
 async function hostPlayTurn(){
   const tracks = await loadPlaylist();
   if (!tracks.length) throw { fallback: true };
@@ -457,6 +480,16 @@ async function hostPlayTurn(){
   const ctx = playlistUri(st.playlist) || playlistUri(DEFAULT_PLAYLIST);
   // Corta la canción anterior justo antes, para que no se mezcle con la nueva
   try { await sp("PUT", "/me/player/pause?device_id=" + dev) } catch (e) {}
+  // En iPhone, Spotify ignora el punto de inicio al cargar una canción nueva y suena el comienzo.
+  // Para evitarlo: se carga la canción en pausa (cola + siguiente), se mueve al punto y recién ahí se reproduce.
+  if (pos && await loadPausedAt(dev, t, pos)){
+    ls.set("clipTrack:" + room, { uri: t.uri, name: t.name, artists: t.artists, date: t.date, turn: st.round + ":" + st.cur });
+    st.started = true;
+    st.clipAt = len ? Date.now() : null;
+    clearTimeout(clipTimer);
+    if (len){ clipDeadline = Date.now() + len * 1000; clipTimer = setTimeout(afterClip, len * 1000) }
+    return;
+  }
   // Se manda la canción como lista (la elegida primero y luego las demás al azar): así Spotify respeta mejor el punto de inicio
   const rest = shuffle(tracks.filter(x => x.uri !== t.uri).map(x => x.uri)).slice(0, 60);
   await sp("PUT", "/me/player/play?device_id=" + dev, { uris: [t.uri, ...rest], position_ms: pos });
@@ -653,9 +686,10 @@ function slotLabel(tl,i){
   return a===b?`También ${a}`:`Entre ${a} y ${b}`;
 }
 function cardHTML(e,isNew){const[t,a,y]=e;return`<div class="card${isNew?" new":""}" style="background:${color(y)}"><span class="yr">${y}</span><span class="t">${esc(t)}</span><span class="a">${esc(a)}</span></div>`}
-function tlHTML(tl,{pick=false,sel=null,highlight=null}={}){
+function tlHTML(tl,{pick=false,sel=null,sel2=null,highlight=null}={}){
   let h='<div class="tl">';const hk=keyOf(highlight);
   for(let i=0;i<=tl.length;i++){
+    if(sel2===i&&st.stealer!=null)h+=`<div class="mystery steal">Robo de ${esc(st.players[st.stealer].name)}</div>`;
     if(sel===i)h+=`<div class="mystery">Canción de ${esc(st.players[st.cur].name)}</div>`;
     else if(pick)h+=`<button class="slot" data-act="slot" data-i="${i}">${slotLabel(tl,i)}</button>`;
     if(i<tl.length)h+=cardHTML(tl[i],hk&&keyOf(tl[i])===hk);
@@ -856,16 +890,18 @@ function render(){
     }
     const others = st.players.map((q,i)=>({q,i})).filter(o=>o.i!==st.cur&&o.q.tk>0);
     let stealUI;
-    if (allHere()) stealUI = others.length ? others.map(o=>`<button class="gold" data-act="pickStealer" data-i="${o.i}">Roba ${esc(o.q.name)}</button>`).join("") : `<p class="muted">Nadie tiene fichas para robar.</p>`;
+    const stolen = st.stealer != null;
+    if (stolen) stealUI = `<p><b>${esc(st.players[st.stealer].name)}</b> ya robó. Nadie más puede robar en este turno.</p>`;
+    else if (allHere()) stealUI = others.length ? others.map(o=>`<button class="gold" data-act="pickStealer" data-i="${o.i}">Roba ${esc(o.q.name)}</button>`).join("") : `<p class="muted">Nadie tiene fichas para robar.</p>`;
     else if (me === st.cur) stealUI = `<p class="muted">Los demás pueden robar desde su celular.</p>`;
     else stealUI = st.players[me].tk > 0 ? `<button class="gold" data-act="pickStealer" data-i="${me}">Robar (1 ficha)</button>` : `<p class="muted">No tienes fichas para robar.</p>`;
     app.innerHTML = `${head}
     ${st.timeUp&&st.slot==null?`<div class="banner">Se acabó el tiempo y ${esc(p.name)} no eligió posición: si nadie roba, la carta se pierde.</div>`:""}
-    <section class="panel"><span class="label">Antes de revelar</span><h2>¿Alguien quiere robar?</h2>
-      <p class="muted">Cuesta 1 ficha. Si ${esc(p.name)} falla y el que roba acierta, se queda con la carta.</p>
+    <section class="panel"><span class="label">Antes de revelar</span><h2>${stolen?"Robo hecho":"¿Alguien quiere robar?"}</h2>
+      <p class="muted">${stolen?`Si ${esc(p.name)} falla y ${esc(st.players[st.stealer].name)} acierta, la carta es de ${esc(st.players[st.stealer].name)}.`:`Cuesta 1 ficha. Solo puede robar una persona por turno. Si ${esc(p.name)} falla y el que roba acierta, se queda con la carta.`}</p>
       <div class="steals">${stealUI}</div>
     </section>
-    ${tlHTML(p.tl,{sel:st.slot})}
+    ${tlHTML(p.tl,{sel:st.slot,sel2:st.sslot})}
     ${msgHTML()}${waitingHost}
     <button class="primary" data-act="reveal" ${st.req?"disabled":""}>Revelar canción</button>${foot}`;
     return;
@@ -964,7 +1000,7 @@ document.addEventListener("click", e => {
     case "back": menuOpen = false; render(); return;
     case "slot":
       if (st.phase === "turn") st.slot = i;
-      else if (st.phase === "steal" && st.robando != null && i !== st.slot){
+      else if (st.phase === "steal" && st.robando != null && st.stealer == null && i !== st.slot){
         st.stealer = st.robando; st.sslot = i; st.players[st.robando].tk--; st.robando = null;
         if (spot()) request("reveal"); else reveal();
       } else return;
@@ -977,7 +1013,7 @@ document.addEventListener("click", e => {
     case "skip": st.players[st.cur].tk--; st.slot = null; st.heard = false;
       if (spot()) request("play"); else { const n = st.deck.pop(); if (n == null) st.phase = "win"; else st.song = card(n) }
       break;
-    case "pickStealer": if (st.robando == null) st.robando = i; break;
+    case "pickStealer": if (st.phase === "steal" && st.robando == null && st.stealer == null && st.players[i] && st.players[i].tk > 0 && i !== st.cur) st.robando = i; else return; break;
     case "cancelSteal": st.robando = null; break;
     case "reveal": if (st.phase === "steal" && st.robando == null){ if (spot()) request("reveal"); else reveal() } break;
     case "cancelReq": st.req = null; handledReq = null; hostBusy = false; break;
