@@ -186,6 +186,8 @@ const BROKERS = ["wss://broker.emqx.io:8084/mqtt","wss://broker.hivemq.com:8884/
 const NS = "lineadeltiempo-oso-v1";
 const REDIRECT = location.origin + location.pathname;
 // Modo de prueba (prueba.html): cada "celular" simulado usa su propio almacenamiento
+// Debe coincidir exacto con la Redirect URI registrada en Spotify (sin "index.html")
+const SP_REDIRECT = location.origin + location.pathname.replace(/index\.html$/, "");
 const QS = new URLSearchParams(location.search);
 const PERFIL = QS.get("perfil"), SOY = QS.get("soy"), NOMBRES = QS.get("nombres");
 const STORE = NS + (PERFIL && PERFIL !== "1" ? ":p" + PERFIL : "");
@@ -345,7 +347,9 @@ async function spotifyLogin(){
   const v = b64url(crypto.getRandomValues(new Uint8Array(48)));
   const ch = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v)));
   ls.set("pkce", v);
-  const q = new URLSearchParams({ response_type:"code", client_id: clientId(), scope: SCOPES, redirect_uri: REDIRECT, code_challenge_method:"S256", code_challenge: ch, state: room || "" });
+  // Si se conectó desde la página de pruebas, volver ahí al terminar
+  try { ls.set("returnTo", window.top !== window ? window.top.location.href : null) } catch (e) { ls.set("returnTo", null) }
+  const q = new URLSearchParams({ response_type:"code", client_id: clientId(), scope: SCOPES, redirect_uri: SP_REDIRECT, code_challenge_method:"S256", code_challenge: ch, state: room || "" });
   (window.top || window).location.href = "https://accounts.spotify.com/authorize?" + q;
 }
 async function spotifyCallback(){
@@ -353,7 +357,7 @@ async function spotifyCallback(){
   const code = p.get("code"), state = p.get("state"), err = p.get("error");
   if (!code && !err) return false;
   if (code){
-    const body = new URLSearchParams({ grant_type:"authorization_code", code, redirect_uri: REDIRECT, client_id: clientId(), code_verifier: ls.get("pkce","") });
+    const body = new URLSearchParams({ grant_type:"authorization_code", code, redirect_uri: SP_REDIRECT, client_id: clientId(), code_verifier: ls.get("pkce","") });
     try {
       const r = await fetch("https://accounts.spotify.com/api/token", { method:"POST", headers:{ "Content-Type":"application/x-www-form-urlencoded" }, body });
       const j = await r.json();
@@ -361,6 +365,8 @@ async function spotifyCallback(){
       else ls.set("spotifyError", j.error_description || j.error || "No se pudo conectar");
     } catch (e) { ls.set("spotifyError", "No se pudo conectar con Spotify") }
   }
+  const back = ls.get("returnTo"); ls.set("returnTo", null);
+  if (back){ location.replace(back); return "away" }
   history.replaceState(null, "", REDIRECT + (state ? "?sala=" + state : ""));
   room = state || room;
   return true;
@@ -964,7 +970,7 @@ window.__ldt = { room: () => room, host: () => isHost, phase: () => st && st.pha
 
 // ===== Inicio =====
 (async () => {
-  await spotifyCallback();
+  if (await spotifyCallback() === "away") return;
   if (room){ isHost = !!ls.get("host:" + room); me = ls.get("me:" + room);
     const saved = ls.get("st:" + room);
     if (saved && saved.seq){ st = saved.st; curSeq = saved.seq; received = true; dirty = isHost } }
