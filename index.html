@@ -275,7 +275,9 @@ function commit(){
   hostCheck();
 }
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && client && conn !== "on") { try { client.reconnect() } catch (e) {} }
+  if (document.visibilityState !== "visible" || !client) return;
+  if (conn !== "on") { try { client.reconnect() } catch (e) {} }
+  else { flush(); hostCheck() }
 });
 
 // ===== Spotify (solo en el celular anfitrión) =====
@@ -547,7 +549,16 @@ function render(){
   }
   const p = st.players[st.cur];
   const meName = typeof me === "number" && st.players[me] ? st.players[me].name : null;
-  const waitingHost = st.req ? `<p class="muted pulse">${st.req.type==="reveal"?"Leyendo la canción en Spotify…":"Poniendo la canción en Spotify…"}</p>` : "";
+  let waitingHost = "";
+  if (st.req){
+    if (reqSeen.id !== st.req.id){ reqSeen = { id: st.req.id, t: Date.now() }; setTimeout(render, 9000) }
+    const late = Date.now() - reqSeen.t > 8500;
+    const what = st.req.type==="reveal" ? "Leyendo la canción en Spotify…" : "Poniendo la canción en Spotify…";
+    waitingHost = !late ? `<p class="muted pulse">${what}${isHost?"":" (lo hace el celular que creó la sala)"}</p>`
+      : isHost && !tok() ? `<div class="banner">Conecta Spotify arriba para continuar.</div>`
+      : `<div class="banner">${isHost?"Spotify está tardando en responder.":"El celular que creó la sala no responde. Desbloquéalo y deja abierta la pestaña del juego: lo hará solo apenas vuelva."}
+          <div class="row" style="margin-top:10px"><button class="ghost" data-act="cancelReq">Cancelar y volver a intentar</button></div></div>`;
+  }
   const foot = `<div class="foot"><span class="label" style="align-self:center">Ronda ${st.round}${spot()?"":` · quedan ${st.deck.length} canciones`}</span><button class="ghost" data-act="menu">Menú</button></div>`;
   const head = `${statusHTML()}${hostPanel()}${scoreHTML()}`;
 
@@ -667,6 +678,7 @@ function render(){
   }
 }
 let showInvite = false;
+let reqSeen = { id: null, t: 0 };
 
 // ===== Acciones =====
 function goRoom(code, host){
@@ -710,6 +722,7 @@ document.addEventListener("click", e => {
     case "pickStealer": if (st.robando == null) st.robando = i; break;
     case "cancelSteal": st.robando = null; break;
     case "reveal": if (st.phase === "steal" && st.robando == null){ if (spot()) request("reveal"); else reveal() } break;
+    case "cancelReq": st.req = null; handledReq = null; hostBusy = false; break;
     case "forceReveal": request("reveal", { force: true }); break;
     case "setYear": { const y = parseInt(yearDraft, 10); if (!(y >= 1900 && y <= 2100)){ document.getElementById("yearIn")?.focus(); return }
       const [t,a] = st.pending; st.pending = null; st.song = [t, a, y, "manual"]; reveal(); break }
