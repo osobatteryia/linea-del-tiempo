@@ -624,6 +624,7 @@ async function hostCheck(){
       }
       st.heard = true; st.msg = null;
     }
+    if (req.type === "buy") { st.msg = null; if (st.players[st.cur].tk >= 3) await hostBuy() }
     if (req.type === "reveal") { st.msg = null;
       if (clipDeadline && (st.after || "duck") === "duck") afterClip(); else { clearTimeout(clipTimer); clipDeadline = null }
       await hostReveal(req.force);
@@ -635,7 +636,43 @@ async function hostCheck(){
     hostBusy = false; commit(); render();
   }
 }
-function request(type, extra){ st.req = Object.assign({ type, id: rid() }, extra || {}); st.msg = null; if (type !== "reveal") st.clipAt = null }
+function request(type, extra){ st.req = Object.assign({ type, id: rid() }, extra || {}); st.msg = null; if (type === "play" || type === "next" || type === "start") st.clipAt = null }
+// Canje: 3 fichas = 1 carta directo a la línea del jugador de turno
+const takenKeys = () => new Set(st.players.flatMap(q => q.tl.map(e => norm(e[0]) + "|" + e[2])));
+function grantCard(entry){
+  const p = st.players[st.cur];
+  if (p.tk < 3) return false;
+  p.tk -= 3; insert(p.tl, entry);
+  st.note = `${p.name} canjeó 3 fichas y sumó «${entry[0]}» (${entry[2]}) a su línea.`;
+  if (p.tl.length >= st.target) st.phase = "win";
+  return true;
+}
+function buyFromList(){
+  const taken = takenKeys();
+  const pool = S.filter(x => !taken.has(norm(x[0]) + "|" + x[2]));
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  return pick ? card(S.indexOf(pick)) : null;
+}
+async function hostBuy(){
+  let entry = null;
+  if (tok() && tok().v === SCOPE_V){
+    try {
+      const tracks = await loadPlaylist();
+      const taken = takenKeys(), last = ls.get("clipTrack:" + room);
+      const pool = tracks.filter(t => !st.used.includes(t.uri) && (!last || t.uri !== last.uri));
+      for (const t of shuffle(pool.slice())){
+        const artist = t.artists.join(", ");
+        const m = findInDB(t.name, artist);
+        const y = m ? m[2] : parseInt(String(t.date || "").slice(0, 4), 10);
+        if (!(y >= 1900 && y <= 2100) || taken.has(norm(t.name) + "|" + y)) continue;
+        entry = [t.name, artist, y, m ? "lista" : "spotify"]; st.used.push(t.uri); break;
+      }
+    } catch (e) {}
+  }
+  if (!entry) entry = buyFromList();
+  if (!entry) throw { msg: "No quedan canciones para canjear." };
+  grantCard(entry);
+}
 
 // Mantener la pantalla del anfitrión encendida
 let wake = null;
@@ -657,7 +694,7 @@ function nextTurn(){
   const win = st.players.find(p => p.tl.length >= st.target);
   if (win || (!spot() && !st.deck.length)){ st.phase = "win"; return }
   st.cur = (st.cur + 1) % st.players.length; if (st.cur === 0) st.round++;
-  Object.assign(st, { phase:"turn", song: spot() ? null : card(st.deck.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false, pending:null, guess:null, guessRes:null, autoBonus:false, clipAt:null, timeUp:false });
+  Object.assign(st, { phase:"turn", song: spot() ? null : card(st.deck.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false, pending:null, guess:null, guessRes:null, autoBonus:false, clipAt:null, timeUp:false, note:null });
 }
 function reveal(){
   const p = st.players[st.cur], y = yr(st.song);
@@ -845,6 +882,7 @@ function render(){
       } else if (guessing){
         msg = st.clip ? `Cuando estés listo, toca el botón. Sonará un fragmento y tendrás ${st.clip} segundos para responder.` : "Cuando estés listo, toca el botón para escuchar la canción.";
         extra += `<button class="primary big" data-act="play">▶ Empezar mi turno</button>`;
+        if (p.tk >= 3) extra += `<button class="gold" data-act="buy">Canjear 3 fichas por una carta</button>`;
       } else {
         msg = `Esperando que ${esc(p.name)} toque Empezar.`;
       }
@@ -861,7 +899,8 @@ function render(){
         <p class="muted" style="font-size:.9rem">${msg}</p></div></div>
       ${waitingHost}${extra}
     </section>
-    ${msgHTML()}
+    ${msgHTML()}${st.note?`<div class="banner">${esc(st.note)}</div>`:""}
+    ${!spot()&&guessing&&p.tk>=3?`<button class="gold" data-act="buy">Canjear 3 fichas por una carta</button>`:""}
     <section style="display:flex;flex-direction:column;gap:10px">
       <span class="label">${guessing?(st.slot==null?"Toca dónde crees que va":"Tu elección"):`Línea de ${esc(p.name)}${st.slot==null?" · eligiendo…":""}`}</span>
       ${tlHTML(p.tl,{pick:guessing&&(!spot()||st.heard),sel:st.slot})}
@@ -1011,6 +1050,9 @@ document.addEventListener("click", e => {
     case "noVolOk": ls.set("noVolume", null); st.after = "none"; break;
     case "mic": startMic(el.dataset.f); return;
     case "play": if (spot() && st.phase === "turn" && !st.req){ request("play"); st.heard = false } else return; break;
+    case "buy": if (st.phase !== "turn" || st.req || st.players[st.cur].tk < 3) return;
+      if (spot()) request("buy"); else { const n = st.deck.pop(); const e = n != null ? card(n) : buyFromList(); if (!e || !grantCard(e)) return }
+      break;
     case "skip": st.players[st.cur].tk--; st.slot = null; st.heard = false;
       if (spot()) request("play"); else { const n = st.deck.pop(); if (n == null) st.phase = "win"; else st.song = card(n) }
       break;
