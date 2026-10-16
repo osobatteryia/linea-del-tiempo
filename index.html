@@ -418,7 +418,12 @@ async function hostNext(){
   }
 }
 // Pone la canción en un punto al azar y la pausa cuando se acaba el tiempo
-let clipTimer = null;
+let clipTimer = null, clipDeadline = null;
+function pauseClip(){ clearTimeout(clipTimer); clipDeadline = null; sp("PUT", "/me/player/pause" + devQ("?")).catch(() => {}) }
+// Si el anfitrión salió de la página mientras sonaba el fragmento, se pausa apenas vuelve
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && clipDeadline && Date.now() >= clipDeadline && st && (st.phase === "turn" || st.phase === "steal")) pauseClip();
+});
 async function hostClip(prevUri){
   st.clipAt = null;
   let it = null;
@@ -441,7 +446,8 @@ async function hostClip(prevUri){
   if (len){
     st.clipAt = Date.now();
     clearTimeout(clipTimer);
-    clipTimer = setTimeout(() => { sp("PUT", "/me/player/pause" + devQ("?")).catch(e => console.log("pause failed", e && e.msg)) }, len * 1000);
+    clipDeadline = Date.now() + len * 1000;
+    clipTimer = setTimeout(pauseClip, len * 1000);
   }
 }
 async function currentUri(){ try { const c = await sp("GET", "/me/player/currently-playing"); return c && c.item && c.item.uri } catch (e) { return null } }
@@ -479,7 +485,7 @@ async function hostCheck(){
       await hostClip(prev);
       st.heard = true; st.msg = null;
     }
-    if (req.type === "reveal") { st.msg = null; clearTimeout(clipTimer); await hostReveal(req.force);
+    if (req.type === "reveal") { st.msg = null; clearTimeout(clipTimer); clipDeadline = null; await hostReveal(req.force);
       if (st.phase === "reveal" || st.phase === "needyear"){ try { await sp("PUT", "/me/player/play" + devQ("?")) } catch (e) {} } }
   } catch (e) {
     st.msg = { t: (e && e.msg) || "Algo falló al hablar con Spotify. Intenta de nuevo.", again: !!(e && e.again) };
