@@ -282,7 +282,7 @@ room = room ? room.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) : null;
 let st = null;            // estado compartido de la partida
 let received = false;     // ya llegó el estado de la sala
 let menuOpen = false, confirmReset = false, yearDraft = "", joinDraft = "";
-let setup = Object.assign({names:["Ana","Pipe","Coni"],target:10,filter:"all",tokens:2,src:"spotify",playlist:DEFAULT_PLAYLIST,clip:10}, ls.get("setup", {}));
+let setup = Object.assign({names:["Ana","Pipe","Coni"],target:10,filter:"all",tokens:2,src:"spotify",playlist:DEFAULT_PLAYLIST,clip:10,after:"duck"}, ls.get("setup", {}));
 if (NOMBRES) setup.names = NOMBRES.split(",").map(x => x.trim()).filter(Boolean).slice(0, 10);
 let me = room ? ls.get("me:" + room) : null;
 let isHost = room ? !!ls.get("host:" + room) : false;
@@ -416,6 +416,7 @@ async function pickDevice(){
   const dev = list.find(x => x.is_active) || list.find(x => x.id === saved) || list[0];
   if (!dev) throw { msg: "No encuentro ningún Spotify abierto. Abre la app de Spotify en el celular del parlante, reproduce algo un segundo y vuelve a intentar." };
   ls.set("spotifyDevice", dev.id);
+  ls.set("spotifyDeviceInfo", { id: dev.id, vol: dev.volume_percent, canVol: dev.supports_volume !== false });
   return dev.id;
 }
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -452,11 +453,14 @@ async function hostPlayTurn(){
     pos = from + Math.floor(Math.random() * (to - from + 1));
   }
   const dev = await pickDevice();
+  await unduck(dev);
   const ctx = playlistUri(st.playlist) || playlistUri(DEFAULT_PLAYLIST);
   await sp("PUT", "/me/player/play?device_id=" + dev, { context_uri: ctx, offset: { uri: t.uri }, position_ms: pos });
   ls.set("clipTrack:" + room, { uri: t.uri, name: t.name, artists: t.artists, date: t.date, turn: st.round + ":" + st.cur });
   st.started = true;
   st.clipAt = len ? Date.now() : null;
+  clearTimeout(clipTimer);
+  if (len){ clipDeadline = Date.now() + len * 1000; clipTimer = setTimeout(afterClip, len * 1000) }
 }
 async function hostStart(){
   const dev = await pickDevice();
@@ -479,9 +483,30 @@ async function hostNext(){
 // Pone la canción en un punto al azar y la pausa cuando se acaba el tiempo
 let clipTimer = null, clipDeadline = null;
 function pauseClip(){ clearTimeout(clipTimer); clipDeadline = null; sp("PUT", "/me/player/pause" + devQ("?")).catch(() => {}) }
+// Al terminar el tiempo: bajar el volumen a la mitad (o pausar) hasta el próximo turno
+async function duck(){
+  if (ls.get("duck") != null) return;
+  let info = ls.get("spotifyDeviceInfo");
+  try { const d = await sp("GET", "/me/player/devices"); const x = ((d && d.devices) || []).find(x => x.id === (info && info.id)) || ((d && d.devices) || []).find(x => x.is_active);
+    if (x) info = { id: x.id, vol: x.volume_percent, canVol: x.supports_volume !== false } } catch (e) {}
+  if (!info || !info.canVol || info.vol == null){ ls.set("noVolume", true); render(); return }
+  const half = Math.max(5, Math.round(info.vol / 2));
+  try { await sp("PUT", "/me/player/volume?volume_percent=" + half + "&device_id=" + info.id); ls.set("duck", info.vol); ls.set("noVolume", null) }
+  catch (e) { ls.set("noVolume", true); render() }
+}
+async function unduck(dev){
+  const v = ls.get("duck"); if (v == null) return;
+  ls.set("duck", null);
+  try { await sp("PUT", "/me/player/volume?volume_percent=" + v + (dev ? "&device_id=" + dev : devQ("&"))) } catch (e) {}
+}
+function afterClip(){
+  clearTimeout(clipTimer); clipDeadline = null;
+  const mode = (st && st.after) || "duck";
+  if (mode === "pause") pauseClip(); else if (mode === "duck") duck();
+}
 // Si el anfitrión salió de la página mientras sonaba el fragmento, se pausa apenas vuelve
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && clipDeadline && Date.now() >= clipDeadline && st && (st.phase === "turn" || st.phase === "steal")) pauseClip();
+  if (document.visibilityState === "visible" && clipDeadline && Date.now() >= clipDeadline && st && (st.phase === "turn" || st.phase === "steal")) afterClip();
 });
 async function hostClip(prevUri){
   st.clipAt = null;
@@ -506,7 +531,7 @@ async function hostClip(prevUri){
     st.clipAt = Date.now();
     clearTimeout(clipTimer);
     clipDeadline = Date.now() + len * 1000;
-    // No se pausa: en iPhone, Spotify en pausa y en segundo plano se "duerme". El límite lo controla el juego.
+    clipTimer = setTimeout(afterClip, len * 1000);
   }
 }
 async function currentUri(){ try { const c = await sp("GET", "/me/player/currently-playing"); return c && c.item && c.item.uri } catch (e) { return null } }
@@ -545,14 +570,17 @@ async function hostCheck(){
         catch (e) { if (!(e && (e.fallback || e.code === 403 || e.code === 404))) throw e }
       }
       if (!done){
+        await unduck();
         const prev = await currentUri();
         if (req.type === "start" || !st.started){ await hostStart(); st.started = true } else await hostNext();
         await hostClip(prev);
       }
       st.heard = true; st.msg = null;
     }
-    if (req.type === "reveal") { st.msg = null; clearTimeout(clipTimer); clipDeadline = null; await hostReveal(req.force);
-      if (st.phase === "reveal" || st.phase === "needyear"){ try { await sp("PUT", "/me/player/play" + devQ("?")) } catch (e) {} } }
+    if (req.type === "reveal") { st.msg = null;
+      if (clipDeadline && (st.after || "duck") === "duck") afterClip(); else { clearTimeout(clipTimer); clipDeadline = null }
+      await hostReveal(req.force);
+      if ((st.after || "duck") === "pause" && (st.phase === "reveal" || st.phase === "needyear")){ try { await sp("PUT", "/me/player/play" + devQ("?")) } catch (e) {} } }
   } catch (e) {
     st.msg = { t: (e && e.msg) || "Algo falló al hablar con Spotify. Intenta de nuevo.", again: !!(e && e.again) };
   } finally {
@@ -575,7 +603,7 @@ function startGame(){
   const src = setup.src;
   st = { phase:"turn", src, playlist: setup.playlist, players: names.map(n => ({ name:n, tl:[card(pool.pop())], tk: setup.tokens })), cur:0, deck: pool,
     song: src === "spotify" ? null : card(pool.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false,
-    target: setup.target, round:1, used:[], lastUri:null, req:null, msg:null, pending:null, clip: src === "spotify" ? (setup.clip || 0) : 0, clipAt:null, started:false };
+    target: setup.target, round:1, used:[], lastUri:null, req:null, msg:null, pending:null, clip: src === "spotify" ? (setup.clip || 0) : 0, clipAt:null, started:false, after: setup.after || "duck" };
   if (me != null && me !== "todos") setMe(null);
 }
 function nextTurn(){
@@ -639,6 +667,8 @@ function hostPanel(){
     <div class="row" style="margin-top:10px"><button class="gold" data-act="spLogin">Conectar Spotify</button></div></div>`;
   if (tok().v !== SCOPE_V) return `<div class="banner">Vuelve a conectar Spotify una vez: así el juego pone cada canción directo, sin pasar por otras.
     <div class="row" style="margin-top:10px"><button class="gold" data-act="spLogin">Reconectar Spotify</button></div></div>`;
+  if (st && ls.get("noVolume") && (st.after || "duck") === "duck") return `<div class="banner">Spotify no deja cambiar el volumen de este aparato desde el juego (pasa con iPhone). La música sigue sonando igual: bájala con los botones del celular o del parlante.
+    <div class="row" style="margin-top:10px"><button class="ghost" data-act="noVolOk">Entendido</button></div></div>`;
   return "";
 }
 function linkHTML(){
@@ -695,6 +725,9 @@ function render(){
       ${setup.src==="spotify"?`<label class="field"><span class="label">Playlist de Spotify (link)</span><input id="pl" data-act="playlist" value="${esc(setup.playlist)}"></label>
         <label class="field"><span class="label">Tiempo para responder</span>
           <select id="clip" data-act="clip">${[[10,"10 segundos"],[15,"15 segundos"],[20,"20 segundos"],[30,"30 segundos"],[0,"Sin límite"]].map(([v,t])=>`<option value="${v}" ${v==setup.clip?"selected":""}>${t}</option>`).join("")}</select></label>
+        ${setup.clip?`<label class="field"><span class="label">Al terminar el tiempo</span>
+          <select id="after" data-act="after">${[["duck","Bajar el volumen a la mitad"],["none","Seguir sonando igual"],["pause","Pausar la música"]].map(([v,t])=>`<option value="${v}" ${v===(setup.after||"duck")?"selected":""}>${t}</option>`).join("")}</select></label>
+          ${(setup.after||"duck")==="pause"?`<p class="muted" style="font-size:.85rem">Pausar solo funciona bien si Spotify queda abierto en pantalla en otro celular. En iPhone, Spotify en pausa y en segundo plano se desconecta.</p>`:""}`:""}
         <p class="muted" style="font-size:.88rem">${setup.clip?`En cada turno suena un fragmento de ${setup.clip} segundos de una parte al azar de la canción. Ese es el tiempo para responder.`:"La canción suena completa y no hay límite de tiempo."}</p>`
       :`<label class="field"><span class="label">Canciones</span>
         <select id="filter" data-act="filter">
@@ -922,6 +955,7 @@ document.addEventListener("click", e => {
       break;
     case "confirm": if (st.slot == null) return; stopMic(); st.timeUp = false; st.phase = "steal"; st.robando = null; st.guess = { t: guessDraft.t.trim().slice(0,80), a: guessDraft.a.trim().slice(0,80) }; break;
     case "otra": if (spot()){ request("play"); st.heard = false } break;
+    case "noVolOk": ls.set("noVolume", null); st.after = "none"; break;
     case "mic": startMic(el.dataset.f); return;
     case "play": if (spot() && st.phase === "turn" && !st.req){ request("play"); st.heard = false } else return; break;
     case "skip": st.players[st.cur].tk--; st.slot = null; st.heard = false;
@@ -959,6 +993,7 @@ document.addEventListener("change", e => {
   if (a === "target") setup.target = +e.target.value;
   if (a === "tokens") setup.tokens = +e.target.value;
   if (a === "filter") setup.filter = e.target.value;
+  if (a === "after"){ setup.after = e.target.value; ls.set("setup", setup); render(); return }
   if (a === "clip"){ setup.clip = +e.target.value; ls.set("setup", setup); render(); return }
   if (a === "src"){ setup.src = e.target.value; ls.set("setup", setup); render(); return }
   ls.set("setup", setup);
