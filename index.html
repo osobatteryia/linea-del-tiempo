@@ -196,7 +196,8 @@ function selfUrl(sala){
   if (sala) q.set("sala", sala);
   const t = q.toString(); return REDIRECT + (t ? "?" + t : "");
 }
-const SCOPES = "user-read-playback-state user-modify-playback-state user-read-currently-playing";
+const SCOPES = "user-read-playback-state user-modify-playback-state user-read-currently-playing playlist-read-private playlist-read-collaborative";
+const SCOPE_V = 2;
 
 // ===== Utilidades =====
 const $app = () => document.getElementById("app");
@@ -356,7 +357,7 @@ async function spotifyCallback(){
     try {
       const r = await fetch("https://accounts.spotify.com/api/token", { method:"POST", headers:{ "Content-Type":"application/x-www-form-urlencoded" }, body });
       const j = await r.json();
-      if (j.access_token) ls.set("spotifyToken", { a: j.access_token, r: j.refresh_token, exp: Date.now() + (j.expires_in - 60) * 1000 });
+      if (j.access_token) ls.set("spotifyToken", { a: j.access_token, r: j.refresh_token, exp: Date.now() + (j.expires_in - 60) * 1000, v: SCOPE_V });
       else ls.set("spotifyError", j.error_description || j.error || "No se pudo conectar");
     } catch (e) { ls.set("spotifyError", "No se pudo conectar con Spotify") }
   }
@@ -371,7 +372,7 @@ async function accessToken(){
   const r = await fetch("https://accounts.spotify.com/api/token", { method:"POST", headers:{ "Content-Type":"application/x-www-form-urlencoded" }, body });
   const j = await r.json();
   if (!j.access_token){ ls.set("spotifyToken", null); return null }
-  ls.set("spotifyToken", { a: j.access_token, r: j.refresh_token || t.r, exp: Date.now() + (j.expires_in - 60) * 1000 });
+  ls.set("spotifyToken", { a: j.access_token, r: j.refresh_token || t.r, exp: Date.now() + (j.expires_in - 60) * 1000, v: t.v });
   return j.access_token;
 }
 async function sp(method, path, body){
@@ -390,8 +391,8 @@ async function sp(method, path, body){
   let j = null; try { j = await r.json() } catch (e) {}
   if (!r.ok){
     const reason = j && j.error && (j.error.reason || j.error.message) || "";
-    if (r.status === 404 || reason === "NO_ACTIVE_DEVICE") throw { msg: "No hay ningún Spotify abierto. Abre la app de Spotify en el celular del parlante y vuelve a intentar." };
-    if (r.status === 403) throw { msg: "Spotify no dejó controlar la música. Revisa que la cuenta sea Premium y que tu usuario esté agregado en la app de Spotify for Developers." };
+    if (r.status === 404 || reason === "NO_ACTIVE_DEVICE") throw { msg: "No hay ningún Spotify abierto. Abre la app de Spotify en el celular del parlante y vuelve a intentar.", code: 404 };
+    if (r.status === 403) throw { msg: "Spotify no dejó controlar la música. Revisa que la cuenta sea Premium y que tu usuario esté agregado en la app de Spotify for Developers.", code: 403 };
     if (r.status === 429) throw { msg: "Spotify pidió esperar un momento. Intenta de nuevo en unos segundos." };
     if (r.status >= 500) throw { msg: "Spotify no respondió. Abre la app de Spotify en el celular del parlante, revisa que esté conectado al parlante y vuelve a intentar.", code: r.status };
     throw { msg: "Spotify respondió con un error (" + r.status + ").", code: r.status };
@@ -405,12 +406,52 @@ function playlistUri(s){
 async function pickDevice(){
   const d = await sp("GET", "/me/player/devices");
   const list = (d && d.devices) || [];
-  const dev = list.find(x => x.is_active) || list[0];
+  const saved = ls.get("spotifyDevice");
+  const dev = list.find(x => x.is_active) || list.find(x => x.id === saved) || list[0];
   if (!dev) throw { msg: "No encuentro ningún Spotify abierto. Abre la app de Spotify en el celular del parlante, reproduce algo un segundo y vuelve a intentar." };
   ls.set("spotifyDevice", dev.id);
   return dev.id;
 }
 const wait = ms => new Promise(r => setTimeout(r, ms));
+// Canciones de la playlist (se cargan una vez). Así el juego elige y pone la canción directo, sin pasar por otras.
+let plCache = { id: null, tracks: null };
+async function loadPlaylist(){
+  const uri = playlistUri(st.playlist) || playlistUri(DEFAULT_PLAYLIST);
+  const id = uri.split(":")[2];
+  if (plCache.id === id && plCache.tracks) return plCache.tracks;
+  const out = [];
+  let url = "/playlists/" + id + "/tracks?limit=100&market=from_token&fields=" + encodeURIComponent("items(track(uri,name,duration_ms,is_playable,artists(name),album(release_date))),next");
+  for (let k = 0; k < 5 && url; k++){
+    const j = await sp("GET", url);
+    for (const it of (j && j.items) || []){
+      const t = it.track;
+      if (t && t.uri && t.uri.startsWith("spotify:track:") && t.is_playable !== false) out.push({ uri: t.uri, name: t.name, ms: t.duration_ms, artists: (t.artists || []).map(a => a.name), date: t.album && t.album.release_date });
+    }
+    url = j && j.next ? j.next.replace("https://api.spotify.com/v1", "") : null;
+  }
+  plCache = { id, tracks: out };
+  return out;
+}
+async function hostPlayTurn(){
+  const tracks = await loadPlaylist();
+  if (!tracks.length) throw { fallback: true };
+  const last = ls.get("clipTrack:" + room);
+  let pool = tracks.filter(t => !st.used.includes(t.uri) && t.uri !== st.lastUri && (!last || t.uri !== last.uri));
+  if (!pool.length) pool = tracks;
+  const t = pool[Math.floor(Math.random() * pool.length)];
+  const len = st.clip || 0;
+  let pos = 0;
+  if (len && t.ms){
+    const from = Math.floor(t.ms * 0.15), to = Math.max(from, Math.floor(t.ms * 0.75) - len * 1000);
+    pos = from + Math.floor(Math.random() * (to - from + 1));
+  }
+  const dev = await pickDevice();
+  const ctx = playlistUri(st.playlist) || playlistUri(DEFAULT_PLAYLIST);
+  await sp("PUT", "/me/player/play?device_id=" + dev, { context_uri: ctx, offset: { uri: t.uri }, position_ms: pos });
+  ls.set("clipTrack:" + room, { uri: t.uri, name: t.name, artists: t.artists, date: t.date, turn: st.round + ":" + st.cur });
+  st.started = true;
+  st.clipAt = len ? Date.now() : null;
+}
 async function hostStart(){
   const dev = await pickDevice();
   const uri = playlistUri(st.playlist) || playlistUri(DEFAULT_PLAYLIST);
@@ -459,7 +500,7 @@ async function hostClip(prevUri){
     st.clipAt = Date.now();
     clearTimeout(clipTimer);
     clipDeadline = Date.now() + len * 1000;
-    clipTimer = setTimeout(pauseClip, len * 1000);
+    // No se pausa: en iPhone, Spotify en pausa y en segundo plano se "duerme". El límite lo controla el juego.
   }
 }
 async function currentUri(){ try { const c = await sp("GET", "/me/player/currently-playing"); return c && c.item && c.item.uri } catch (e) { return null } }
@@ -492,9 +533,16 @@ async function hostCheck(){
   const req = st.req; handledReq = req.id; hostBusy = true;
   try {
     if (req.type === "start" || req.type === "next" || req.type === "play"){
-      const prev = await currentUri();
-      if (req.type === "start" || !st.started){ await hostStart(); st.started = true } else await hostNext();
-      await hostClip(prev);
+      let done = false;
+      if (tok().v === SCOPE_V){
+        try { await hostPlayTurn(); done = true }
+        catch (e) { if (!(e && (e.fallback || e.code === 403 || e.code === 404))) throw e }
+      }
+      if (!done){
+        const prev = await currentUri();
+        if (req.type === "start" || !st.started){ await hostStart(); st.started = true } else await hostNext();
+        await hostClip(prev);
+      }
       st.heard = true; st.msg = null;
     }
     if (req.type === "reveal") { st.msg = null; clearTimeout(clipTimer); clipDeadline = null; await hostReveal(req.force);
@@ -583,6 +631,8 @@ function hostPanel(){
     <div class="prow" style="margin-top:10px"><input id="cid" placeholder="Client ID de Spotify" data-act="cid"><button class="gold" data-act="saveCid">Guardar</button></div></div>`;
   if (!tok()) return `<div class="banner">Este es el celular anfitrión. Conecta tu Spotify para que la música avance sola.
     <div class="row" style="margin-top:10px"><button class="gold" data-act="spLogin">Conectar Spotify</button></div></div>`;
+  if (tok().v !== SCOPE_V) return `<div class="banner">Vuelve a conectar Spotify una vez: así el juego pone cada canción directo, sin pasar por otras.
+    <div class="row" style="margin-top:10px"><button class="gold" data-act="spLogin">Reconectar Spotify</button></div></div>`;
   return "";
 }
 function linkHTML(){
