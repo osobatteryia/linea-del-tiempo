@@ -30,7 +30,7 @@ Juego musical estilo **Hitster** para jugar en grupo, cada uno desde su celular.
 - Playlist por defecto: `https://open.spotify.com/playlist/4BX1DjvzqAT3GePXKGzyTn` ("Línea del Tiempo Musical: Adivina el Año", privada, de Oso). Al crear la partida se pueden pegar **varias playlists** (una por línea, `playlistUris`); se mezclan sin duplicados (hasta 1000 canciones por playlist).
 - **Lectura de playlists (cambio de Spotify, feb 2026):** se usa `GET /playlists/{id}/items` (respuesta `items[].item`); `/tracks` quedó eliminado y, al fallar, el juego caía al método antiguo (shuffle de Spotify) y las canciones se repetían. Spotify **solo entrega canciones de playlists propias o colaborativas**; si no puede leer ninguna, se avisa (`plWarn`).
 - **Reproducción sin "fugas":** el método directo manda **solo** la canción elegida (`uris:[t.uri]`), no una lista; antes mandaba 60 canciones más que seguían sonando y luego parecían repetidas. Si el método de cola (`loadPausedAt`) hace sonar otra canción (cola de Spotify con restos), se marca `queueBad` y desde ahí se usa solo el directo. Si no se puede leer la playlist se muestra el motivo (`plWarn`).
-- **Revisar playlists (al crear la partida):** botón "Revisar playlists" (`checkPlaylists`, `plCheckHTML`) muestra por cada link "✓ Nombre: N canciones" o "✗ … no es tuya ni colaborativa". Si el juego no puede leer la playlist cae al método antiguo (`hostStart`), que ahora parte en una posición al azar (`offset`) en vez de la primera canción; ese respaldo igual puede repetir.
+- **Editor de playlists (al crear la partida):** una fila por playlist con su **nombre**, "✓ N canciones" o "✗ Spotify no deja leer sus canciones…", y botón ✕ para quitarla; abajo un campo "Pega aquí el link" + **Agregar** (o Enter) y el total de canciones (`plEditorHTML`, `plAdd`, `plIds`/`setPlIds`, `fetchPlInfo`, cache `plInfo` en localStorage 10 min). Se guarda igual en `setup.playlist` (links separados por salto de línea). Reemplazó al textarea y al botón "Revisar playlists" (`checkPlaylists` queda sin uso). Si el juego no puede leer la playlist cae al método antiguo (`hostStart`), que ahora parte en una posición al azar (`offset`) en vez de la primera canción; ese respaldo igual puede repetir.
 - **Diagnóstico en el Menú del anfitrión:** "🎵 Playlist: N canciones · sonaron en esta partida · historial de este celular · modo directo".
 - **Sin repetir:** `pickFresh` evita canciones ya sonadas en la partida (`st.played`, `st.used`), las que ya son carta de alguien, y las sonadas en partidas anteriores (historial `heardHist` en el anfitrión, `markHeard`). Si ya sonaron todas, elige entre el 25 % más antiguo.
 - Los nombres de Spotify se muestran limpios (`cleanName`: quita "- 2019 Remaster", "(Live)", "- En Vivo", etc.).
@@ -116,7 +116,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (1/5)
+### Pendientes de consolidar (2/5)
+- Editor de playlists con nombre, cantidad, ✕ para quitar y campo "Agregar" (reemplaza el textarea).
 - Botón "Revisar playlists" al crear la partida; respaldo `hostStart` con posición al azar. Causa probable de repeticiones: playlist no propia (p. ej. la de rock generada por Spotify) → el juego no lee sus canciones y usa el aleatorio de Spotify.
 
 ### Historial

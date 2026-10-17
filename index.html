@@ -127,6 +127,14 @@ textarea{box-sizing:border-box;display:block;max-width:100%;resize:vertical;line
 .steals button.taken{opacity:.45;cursor:not-allowed}
 #upd{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:50;display:flex;align-items:center;gap:10px;justify-content:space-between;background:var(--surface);border:1.5px solid var(--accent);border-radius:16px;padding:10px 12px;box-shadow:0 8px 30px #000a;font-size:.9rem}
 #upd button{flex:none;width:auto;min-height:0;padding:10px 14px}
+.pllist{display:flex;flex-direction:column;gap:8px}
+.plrow{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 10px 10px 14px}
+.plinfo{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.plinfo b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plinfo small{font-size:.8rem}
+.plx{flex:none;width:40px;min-height:40px;padding:0;border-radius:10px}
+.pladd{display:flex;gap:8px}
+.pladd input{flex:1}.pladd button{flex:none;width:auto;padding:0 16px}
 .switchrow{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;margin:0;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font:inherit;font-weight:600;text-align:left;cursor:pointer}
 .switch{flex:none;width:51px;height:31px;border-radius:999px;background:#3a3a44;position:relative;transition:background .2s}
 .switch span{position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px #0006;transition:left .2s}
@@ -509,6 +517,47 @@ let plCache = { id: null, tracks: null };
 let plWarn = null;
 // Revisión de playlists al crear la partida: cuántas canciones puede leer el juego de cada una
 let plCheck = { key: null, rows: null, busy: false };
+// ===== Editor de playlists (crear partida): una fila por playlist con nombre, cantidad de canciones y botón quitar =====
+const plIds = () => { const out = [], re = /playlist[\/:]([A-Za-z0-9]{10,})/g; let m; while ((m = re.exec(String(setup.playlist || "")))) if (!out.includes(m[1])) out.push(m[1]); return out };
+const setPlIds = ids => { setup.playlist = ids.map(id => "https://open.spotify.com/playlist/" + id).join("\n"); ls.set("setup", setup) };
+let plInfo = ls.get("plInfo", {}), plBusy = {}, plAddMsg = "";
+async function fetchPlInfo(id){
+  if (plBusy[id] || !tok()) return; plBusy[id] = true;
+  const info = { name: null, n: 0, ok: false, err: "" };
+  try { const m = await sp("GET", "/playlists/" + id + "?fields=name,owner(display_name)"); if (m){ info.name = m.name; info.owner = m.owner && m.owner.display_name } } catch (e) {}
+  try { const j = await sp("GET", "/playlists/" + id + "/items?limit=1"); info.n = (j && j.total) || 0; info.ok = info.n > 0; if (!info.ok) info.err = "Spotify no deja leer sus canciones: cópiala a una playlist tuya" }
+  catch (e) { info.err = e && (e.code === 403 || e.code === 404) ? "Spotify no deja leer sus canciones: cópiala a una playlist tuya" : "No se pudo revisar ahora" }
+  info.at = Date.now(); plInfo[id] = info; ls.set("plInfo", plInfo); delete plBusy[id];
+  if (!st) render();
+}
+function plEditorHTML(){
+  const ids = plIds();
+  if (tok()) for (const id of ids) if (!plInfo[id] || Date.now() - (plInfo[id].at || 0) > 600000) setTimeout(() => fetchPlInfo(id), 0);
+  const rows = ids.map(id => {
+    const i = plInfo[id] || {};
+    const name = i.name || (plBusy[id] || tok() ? "Buscando nombre…" : "Playlist " + id.slice(0, 6) + "…");
+    const stat = !tok() ? `<span class="muted">Conecta Spotify para ver los detalles</span>` : plBusy[id] && !i.at ? `<span class="muted">Revisando…</span>`
+      : i.ok ? `<span style="color:var(--ok)">✓ ${i.n} canciones</span>` : `<span style="color:var(--bad)">✗ ${esc(i.err || "Sin revisar")}</span>`;
+    return `<div class="plrow"><div class="plinfo"><b>${esc(name)}</b><small>${stat}</small></div><button class="ghost plx" data-act="plDel" data-id="${id}" aria-label="Quitar ${esc(name)}">✕</button></div>`;
+  }).join("");
+  const total = ids.reduce((a, id) => a + ((plInfo[id] && plInfo[id].ok && plInfo[id].n) || 0), 0);
+  return `<div class="field"><span class="label">Playlists de Spotify</span>
+    <div class="pllist">${rows || `<p class="muted" style="margin:0">No hay playlists: se usará la playlist por defecto.</p>`}</div>
+    ${ids.length > 1 && total ? `<p class="muted" style="font-size:.85rem;margin:2px 0 0">En total: <b>${total}</b> canciones (las repetidas cuentan una vez al jugar).</p>` : ""}
+    <div class="pladd"><input id="plNew" placeholder="Pega aquí el link de una playlist" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"><button class="gold" data-act="plAdd" type="button">Agregar</button></div>
+    ${plAddMsg ? `<p style="font-size:.85rem;margin:0;color:var(--bad)">${esc(plAddMsg)}</p>` : `<p class="muted" style="font-size:.8rem;margin:0">En Spotify: ··· → Compartir → Copiar enlace. Se mezclan las canciones de todas.</p>`}
+  </div>`;
+}
+function plAdd(){
+  const el = document.getElementById("plNew"); const v = el ? el.value : "";
+  const re = /playlist[\/:]([A-Za-z0-9]{10,})/g; let m; const found = [];
+  while ((m = re.exec(v))) found.push(m[1]);
+  if (!found.length){ plAddMsg = v.trim() ? "Ese link no es de una playlist de Spotify." : "Primero pega el link de la playlist."; render(); return }
+  const ids = plIds(); let added = 0;
+  for (const id of found) if (!ids.includes(id)){ ids.push(id); added++ }
+  plAddMsg = added ? "" : "Esa playlist ya está en la lista.";
+  setPlIds(ids); render();
+}
 function plCheckHTML(){
   if (plCheck.busy) return `<p class="muted" style="font-size:.85rem">Revisando playlists…</p>`;
   if (!plCheck.rows || plCheck.key !== setup.playlist) return "";
@@ -1100,7 +1149,7 @@ function drawQR(){
   el.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-const VERSION = "17-oct v29";
+const VERSION = "17-oct v30";
 function render(){
   const app = $app();
   checkGame();
@@ -1141,8 +1190,8 @@ function render(){
           <option value="spotify" ${setup.src==="spotify"?"selected":""}>Spotify automático</option>
           <option value="manual" ${setup.src==="manual"?"selected":""}>Un DJ busca cada canción</option>
         </select></label>
-      ${setup.src==="spotify"?`<label class="field"><span class="label">Playlists de Spotify (links, una por línea)</span><textarea id="pl" data-act="playlist" rows="3" autocapitalize="off" autocorrect="off" spellcheck="false">${esc(setup.playlist)}</textarea><span class="muted" style="font-size:.8rem">Puedes pegar varias: se mezclan todas las canciones.</span></label>
-        ${tok()?`<div id="plcheck">${plCheckHTML()}</div><button class="ghost" data-act="plCheck" type="button">Revisar playlists</button>`:""}
+      ${setup.src==="spotify"?plEditorHTML():""}
+      ${setup.src==="spotify"?`
         <label class="field"><span class="label">Tiempo para responder</span>
           <select id="clip" data-act="clip">${[[10,"10 segundos"],[15,"15 segundos"],[20,"20 segundos"],[30,"30 segundos"],[0,"Sin límite"]].map(([v,t])=>`<option value="${v}" ${v==setup.clip?"selected":""}>${t}</option>`).join("")}</select></label>
         ${setup.clip?`<label class="field"><span class="label">Parte de la canción</span>
@@ -1422,6 +1471,8 @@ document.addEventListener("click", e => {
     case "add": setup.names.push(""); ls.set("setup", setup); render(); return;
     case "rm": setup.names.splice(i, 1); ls.set("setup", setup); render(); return;
     case "plCheck": checkPlaylists(); return;
+    case "plAdd": plAdd(); return;
+    case "plDel": setPlIds(plIds().filter(x => x !== el.dataset.id)); plAddMsg = ""; render(); return;
     case "start": if (setup.src === "spotify" && (!clientId() || !tok())){ document.querySelector('[data-act="spLogin"],#cid')?.scrollIntoView({ block:"center" }); return } startGame(); keepAwake(); break;
     case "iam": {
       if (el.dataset.i === "todos"){ releaseMine(); setMe("todos"); commit(); render(); return }
@@ -1495,6 +1546,8 @@ document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id
 
 // Para la página de pruebas
 window.__ldt = { room: () => room, host: () => isHost, phase: () => st && st.phase, cur: () => st ? st.cur : null, conn: () => conn };
+
+document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target && e.target.id === "plNew"){ e.preventDefault(); plAdd() } });
 
 // ===== Aviso de versión nueva =====
 // Safari guarda copias de la página; cada minuto (y al volver a la pestaña) se revisa si hay una versión publicada más nueva
