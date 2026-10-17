@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0b10">
 <title>Línea del Tiempo Musical</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Línea Tiempo">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@700&display=swap">
 <style>
@@ -350,7 +356,10 @@ function startMic(f){
 
 // ===== Estado =====
 const myId = ls.get("clientId") || (() => { const v = rid(); ls.set("clientId", v); return v })();
-let room = new URLSearchParams(location.search).get("sala");
+// Ícono de la pantalla de inicio: abre con ?inicio=1 → siempre la portada para crear o unirse a una partida
+const FROM_ICON = new URLSearchParams(location.search).has("inicio");
+let room = FROM_ICON ? null : new URLSearchParams(location.search).get("sala");
+if (FROM_ICON) try { history.replaceState(null, "", location.pathname) } catch (e) {}
 room = room ? room.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) : null;
 let st = null;            // estado compartido de la partida
 let received = false;     // ya llegó el estado de la sala
@@ -1303,7 +1312,7 @@ function render(){
   window.scrollTo(0, y);
 }
 
-const VERSION = "17-oct v36";
+const VERSION = "17-oct v37";
 function renderView(){
   const app = $app();
   checkGame();

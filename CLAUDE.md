@@ -18,6 +18,7 @@ Juego musical estilo **Hitster** para jugar en grupo, cada uno desde su celular.
 - `index.html` — todo el juego en un solo archivo (HTML + CSS + JS, sin build). ~1200 líneas.
 - `prueba.html` — banco de pruebas: carga `index.html` 4 veces en iframes (Oso anfitrión, Ana, Pipe, Coni), cada uno con almacenamiento propio (`?perfil=N&soy=N`). Detecta la sala que crea Oso y conecta a los otros 3 solos. Vista por pestañas o "Ver los 4".
 - `README.md`, `CLAUDE.md` (este archivo).
+- `manifest.json`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png` — ícono y datos de la app web (pantalla de inicio del iPhone).
 - **No subir** carpetas de herramientas (`.claude/skills`, `__pycache__`). Oso lo pidió explícitamente. Si otro chat trabaja en una rama con herramientas, traer solo `index.html` (`git checkout <rama> -- index.html`).
 
 ## Arquitectura
@@ -117,10 +118,11 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (3/5)
+### Pendientes de consolidar (4/5)
 - iPhone: con v33 salió "[sin reproductor activo]": el play con `uris` apagaba Spotify en segundo plano. Ahora en celulares primero `loadQueueNoPause` (fila + siguiente, sin pausa, confirma que suene; si queda en pausa >3 veces o la cola tiene restos → `loadNoPause`). `spLog` guarda las últimas llamadas a Spotify (método, ruta corta, estado, ×repeticiones) y se agrega al aviso de error para diagnosticar desde la captura de Oso.
 - v34 tampoco sirvió (turno 2: fila+siguiente → pausa sin canción). Oso confirmó que **antes funcionaba en el mismo iPhone**: era el método v18 (pausa + `loadPausedAtV18` sin pausas extra; respaldo play con la canción + ~60 más de la playlist, así Spotify **nunca queda en silencio** entre turnos). Restaurado para celulares (`playPhoneV18`). Para no repetir lo que suena de fondo, al empezar cada turno se anota como escuchada la canción que sonaba (`prevUri` → `markHeard`). `loadQueueNoPause`, `loadNoPause`, `wakeDevice` quedan sin uso en celulares. Lección: en iPhone el problema real es dejar a Spotify en silencio; no mandar solo una canción.
 - Botón Robar con contador adentro: clase `.steal` (número `.stealT` en píldora + barra clara `--p` que se vacía), lo actualiza el `setInterval` de 250 ms de la fase `steal`.
+- Ícono en la pantalla de inicio (app web): `manifest.json` (`start_url` `./?inicio=1`, standalone) + `apple-touch-icon.png`, `icon-192.png`, `icon-512.png` (disco neón + línea de tiempo, hechos con PIL). Con `?inicio` (`FROM_ICON`) se ignora `?sala` y se limpia la URL → siempre la portada. La app web de iOS tiene almacenamiento aparte de Safari: hay que conectar Spotify y pegar playlists de nuevo la primera vez. Manual para Oso (configuración + reglas) en un Doc de Claude: https://claude.ai/code/artifact/ffce100c-0a82-4f1a-9d84-765b543f7c99
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.
