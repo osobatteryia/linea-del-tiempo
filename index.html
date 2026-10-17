@@ -116,6 +116,7 @@ details ol{margin:10px 0 0;padding-left:20px;display:flex;flex-direction:column;
 .wrongslot{border:2px dashed var(--bad);color:var(--bad);border-radius:12px;padding:8px 12px;font-weight:700;text-align:center}
 .votes button{flex:1 1 120px}
 .votecount{font-size:.85rem}
+.clef{font-family:"Apple Symbols","Noto Music","Segoe UI Symbol",serif;font-size:1.6em;line-height:0;vertical-align:-.15em;font-weight:400}
 .checkres{font-family:var(--display);font-weight:800;font-size:1.25rem;text-align:center;padding:14px;border-radius:16px;border:1.5px solid}
 .checkres.ok{color:var(--ok);border-color:var(--ok)}
 .checkres.won{font-size:1.4rem;background:color-mix(in oklab,var(--ok) 14%,transparent);animation:pop .5s ease-out}
@@ -903,15 +904,15 @@ function voteHTML(p){
   if (!(st.guess && st.guess.t && st.guess.a)) return `<p class="muted">Para votar la ficha, ${esc(p.name)} tenía que acertar el año y completar canción y artista.</p>`;
   const v = voteInfo();
   if (st.voteWon) return `<p class="verdict ok" style="font-size:1.1rem">¡El grupo le dio la ficha! +1</p>`;
-  if (v.lost) return `<p class="verdict bad" style="font-size:1.1rem">El grupo decidió no darle la ficha.</p><p class="muted votecount">👍 ${v.yes} · 👎 ${v.no} de ${v.voters}</p>`;
+  if (v.lost) return `<p class="verdict bad" style="font-size:1.1rem">El grupo decidió no darle la ficha.</p><p class="muted votecount"><span class="clef">𝄞</span> ${v.yes} · <span class="clef">𝄢</span> ${v.no} de ${v.voters}</p>`;
   if (p.tk >= 5) return `<p class="muted">${esc(p.name)} ya tiene 5 fichas, el máximo.</p>`;
-  const count = `<p class="muted votecount">👍 ${v.yes} · 👎 ${v.no} · faltan ${v.voters - v.yes - v.no} · se necesitan ${v.need} sí</p>`;
+  const count = `<p class="muted votecount"><span class="clef">𝄞</span> ${v.yes} · <span class="clef">𝄢</span> ${v.no} · faltan ${v.voters - v.yes - v.no} · se necesitan ${v.need} sí</p>`;
   if (allHere()) return `<p>¿Estaba bien? Voten a mano alzada.</p><button class="gold" data-act="voteAll">El grupo decidió darle la ficha</button>`;
   if (me === st.cur) return `<p>El grupo está votando si te dan la ficha.</p>${count}`;
   const mine = v.votes[me];
-  if (mine === true || mine === false) return `<p>Tu voto: <b>${mine ? "👍 Dar ficha" : "👎 No"}</b> (no se puede cambiar). Esperando a los demás.</p>${count}`;
+  if (mine === true || mine === false) return `<p>Tu voto: <b>${mine ? '<span class="clef">𝄞</span> Dar ficha' : '<span class="clef">𝄢</span> No'}</b> (no se puede cambiar). Esperando a los demás.</p>${count}`;
   return `<p>¿Le dan la ficha a ${esc(p.name)}? Comparen lo que escribió con la respuesta.</p>
-    <div class="row votes"><button class="${mine===true?"gold":"ghost"}" data-act="vote" data-v="1">👍 Dar ficha</button><button class="${mine===false?"primary":"ghost"}" data-act="vote" data-v="0">👎 No</button></div>${count}`;
+    <div class="row votes"><button class="${mine===true?"gold":"ghost"}" data-act="vote" data-v="1"><span class="clef">𝄞</span> Dar ficha</button><button class="${mine===false?"primary":"ghost"}" data-act="vote" data-v="0"><span class="clef">𝄢</span> No</button></div>${count}`;
 }
 function applyVote(i, val){
   if (!st || st.phase !== "reveal" || st.voteWon || i === st.cur) return false;
@@ -974,7 +975,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v12";
+const VERSION = "17-oct v13";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
