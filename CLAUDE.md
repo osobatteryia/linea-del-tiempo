@@ -56,7 +56,7 @@ Para encontrar algo rápido sin leer todo el archivo: busca el nombre con `grep 
 | Estado (`st`, `setup`, `me`, `isHost`, `room`) | `// ===== Estado =====` |
 | Conexión entre celulares (MQTT) | `connectRoom`, `commit`, `flush`, `saveLocal` |
 | Login Spotify | `spotifyLogin`, `spotifyCallback`, `accessToken`; llamadas a la API: `sp()` |
-| Elegir y poner la canción del turno | `loadPlaylist`, `pickFresh`, `markHeard`, `hostPlayTurn`, `loadNoPause` (celulares, confirma que suene), `wakeDevice`, `loadPausedAt` (computador/parlante), `pickDevice`; método antiguo: `hostStart`, `hostNext`, `hostClip` |
+| Elegir y poner la canción del turno | `loadPlaylist`, `pickFresh`, `markHeard`, `hostPlayTurn`, `loadQueueNoPause` (celulares, 1.º), `loadNoPause` (celulares, confirma que suene), `wakeDevice`, `loadPausedAt` (computador/parlante), `pickDevice`; método antiguo: `hostStart`, `hostNext`, `hostClip` |
 | Fin del fragmento (bajar volumen / pausar) | `afterClip`, `duck`, `unduck`, `pauseClip` |
 | Revisar respuesta (✓/✗ del año, sin mostrar la canción) | `doCheck`, `checkOwner`, `CHECK_FALLBACK`; con Spotify: `request("check")` → `resolveSong` en el anfitrión |
 | Revelar con Spotify | `hostReveal` = `resolveSong` + `reveal()` (usa `clipTrack:<sala>` guardado) |
@@ -117,7 +117,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (0/5)
+### Pendientes de consolidar (1/5)
+- iPhone: con v33 salió "[sin reproductor activo]": el play con `uris` apagaba Spotify en segundo plano. Ahora en celulares primero `loadQueueNoPause` (fila + siguiente, sin pausa, confirma que suene; si queda en pausa >3 veces o la cola tiene restos → `loadNoPause`). `spLog` guarda las últimas llamadas a Spotify (método, ruta corta, estado, ×repeticiones) y se agrega al aviso de error para diagnosticar desde la captura de Oso.
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.

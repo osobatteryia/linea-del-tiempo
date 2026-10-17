@@ -467,6 +467,8 @@ async function accessToken(){
   ls.set("spotifyToken", { a: j.access_token, r: j.refresh_token || t.r, exp: Date.now() + (j.expires_in - 60) * 1000, v: t.v });
   return j.access_token;
 }
+// Registro corto de las últimas llamadas a Spotify (se muestra en los avisos de error para saber dónde falló)
+const spLog = [];
 async function sp(method, path, body){
   const a = await accessToken();
   if (!a) throw { msg: "Conecta Spotify de nuevo desde el celular anfitrión." };
@@ -478,6 +480,10 @@ async function sp(method, path, body){
     if (r && r.status < 500) break;
     if (k < 2) await new Promise(res => setTimeout(res, 700 * (k + 1)));
   }
+  { const e = method[0] + " " + path.split("?")[0].replace("/me/player", "p").replace(/^\/playlists\/[^/]+/, "pl") + " " + (r ? r.status : "x");
+    const l = spLog[spLog.length - 1];
+    if (l && l.replace(/ ×\d+$/, "") === e) spLog[spLog.length - 1] = e + " ×" + ((+(l.match(/×(\d+)$/) || [0, 1])[1]) + 1); else spLog.push(e) }
+  if (spLog.length > 14) spLog.splice(0, spLog.length - 14);
   if (!r) throw { msg: "No hay conexión con Spotify. Revisa el internet y vuelve a intentar.", code: 0 };
   if (r.status === 204) return null;
   let j = null; try { j = await r.json() } catch (e) {}
@@ -683,7 +689,7 @@ async function loadNoPause(dev, t, pos){
   // Spotify a veces responde "OK" pero no suena (app dormida en segundo plano): se confirma que de verdad esté sonando
   const confirm = async () => {
     let last = null;
-    for (let k = 0; k < 16; k++){
+    for (let k = 0; k < 10; k++){
       await wait(200);
       let c = null; try { c = await sp("GET", "/me/player") } catch (e) {}
       last = c;
@@ -705,7 +711,31 @@ async function loadNoPause(dev, t, pos){
   if (r.ok) return;
   const c = r.last, d = c && c.device;
   const diag = !c ? "sin reproductor activo" : (d ? d.name + " (" + d.type + ")" : "?") + " · " + (c.is_playing ? "sonando" : "en pausa") + " · " + (c.item ? (c.item.uri === t.uri ? "canción correcta" : "otra canción") : "sin canción");
-  throw { msg: "Spotify recibió la canción pero no está sonando. Abre la app de Spotify, dale play a cualquier canción, vuelve al juego sin pausarla y toca Empezar mi turno otra vez. [" + diag + "]", stay: true };
+  throw { msg: "Spotify recibió la canción pero no está sonando. Abre la app de Spotify, dale play a cualquier canción, vuelve al juego sin pausarla y toca Empezar mi turno otra vez. [" + diag + " · " + ((ls.get("spotifyDeviceInfo") || {}).type || "?") + "] [" + spLog.slice(-10).join(", ") + "]", stay: true };
+}
+// iPhone: la forma más suave de cambiar de canción es ponerla en la fila y pasar a la siguiente (como tocar ⏭):
+// Spotify no corta el audio y el iPhone no lo duerme. Nunca se pausa.
+async function loadQueueNoPause(dev, t, pos, prevUri){
+  if (queueBad) return false;
+  try {
+    await sp("POST", "/me/player/queue?uri=" + encodeURIComponent(t.uri) + "&device_id=" + dev);
+    await wait(250);
+    await sp("POST", "/me/player/next?device_id=" + dev);
+  } catch (e) { if (e && e.code === 404) throw e; return false }
+  let other = 0, paused = 0;
+  for (let k = 0; k < 15; k++){
+    await wait(200);
+    let c = null; try { c = await sp("GET", "/me/player") } catch (e) {}
+    if (!c){ if (k >= 5) return false; continue }
+    const u = c.item && c.item.uri;
+    if (u === t.uri){
+      if (!c.is_playing){ if (++paused > 3) return false; try { await sp("PUT", "/me/player/play?device_id=" + dev) } catch (e) {} continue }
+      if (pos && (c.progress_ms || 0) < pos - 2000){ try { await sp("PUT", "/me/player/seek?position_ms=" + pos + "&device_id=" + dev) } catch (e) {} }
+      return true;
+    }
+    if (u && u !== prevUri && ++other >= 3){ queueBad = true; return false }
+  }
+  return false;
 }
 // Si Spotify se desconectó, intenta despertarlo una vez (solo funciona si sigue en la lista de equipos)
 async function wakeDevice(dev){
@@ -737,7 +767,7 @@ async function hostPlayTurn(){
   // Corta la canción anterior justo antes, para que no se mezcle con la nueva
   let prevUri = null; try { const c = await sp("GET", "/me/player/currently-playing"); prevUri = c && c.item && c.item.uri } catch (e) {}
   if (isPhoneDev()){
-    try { await loadNoPause(dev, t, pos) }
+    try { if (!(await loadQueueNoPause(dev, t, pos, prevUri))) await loadNoPause(dev, t, pos) }
     catch (e) { if (e && e.code === 404){ const d2 = await wakeDevice(dev); await loadNoPause(d2, t, pos) } else throw e }
     ls.set("clipTrack:" + room, { uri: t.uri, name: t.name, artists: t.artists, date: t.date, turn: st.round + ":" + st.cur });
     st.started = true;
@@ -1227,7 +1257,7 @@ function render(){
   window.scrollTo(0, y);
 }
 
-const VERSION = "17-oct v33";
+const VERSION = "17-oct v34";
 function renderView(){
   const app = $app();
   checkGame();
