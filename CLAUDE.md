@@ -60,6 +60,7 @@ Para encontrar algo rápido sin leer todo el archivo: busca el nombre con `grep 
 | Botón Revelar (solo jugador de turno, sola a los 30 s) | `STEAL_WINDOW`, `revealWait`, `revealOwner`, `revealReadyAt`, `autoRevealLeft`, `doReveal`, `canReveal`, `revealBtnHTML` |
 | Botón Siguiente turno (solo jugador de turno) | `NEXT_FALLBACK`, `nextOwner`, `nextBtnHTML` |
 | Votación de ficha | `voteInfo`, `voteHTML`, `applyVote`, `myVote` |
+| Ver la línea de otro jugador | `viewerHTML`, `viewTl`, `case "viewTl"` |
 | Marcador, barra de sala, avisos, panel de Spotify, QR | `scoreHTML`, `statusHTML`, `msgHTML`, `hostPanel`, `linkHTML`, `drawQR` |
 | Pantallas | `render()`: portada (`if (!room)`), crear partida (`if (!st)`), menú (`menuOpen`), fases `turn`, `check`, `steal`, `needyear`, `reveal`, `win`. Línea propia de cada jugador: `myTl` |
 | Cuenta regresiva y entrega automática al acabarse el tiempo | `timeLeft` + `setInterval` en `// ===== Cuenta regresiva =====` |
@@ -75,6 +76,7 @@ Fases de `st.phase`: `turn` → `check` (botón Revisar respuesta) → `steal` (
 - Casillas opcionales **canción** y **artista** (con micrófono para dictar, español `es-CL`). Si **acertó el año** y acierta las dos (comparación tolerante a tildes y errores chicos) → +1 ficha automática al revelar. Si falló el año, no hay ficha.
 - **Votación de ficha:** solo si **acertó el año** (carta bien ubicada) **y** completó canción y artista, pero no acertó las dos; los **demás** votan 👍/👎; se entrega con mayoría de los demás (empate o no votar = no). El jugador de turno no puede darse la ficha. En celular compartido, un solo botón "El grupo decidió darle la ficha". No hay votación si le robaron la carta.
 - **Saltar canción:** 1 ficha.
+- **Cada celular ve solo su propia línea** (el jugador de turno ve la suya como "Tu elección"). Las líneas de los demás se ven con los botones de "Ver la línea de otro jugador" (`viewerHTML`, `viewTl`, solo en ese celular). Al revelar, todos ven el resultado (dónde iba / línea del que se quedó la carta).
 - **Nadie ve dónde puso la carta el jugador de turno** hasta que se revela (solo él, o el celular compartido).
 - **Revisar respuesta:** al terminar el tiempo (o confirmar), el jugador de turno toca "Revisar respuesta" (respaldo: a los 30 s aparece para todos). Todos ven solo **✓ acertó el año** o **✗ falló**; no se ve canción, año ni artista.
 - **Robar:** solo si falló. Hay **5 s**; el primero que toca Robar (1 ficha, **un solo robo por turno**) ubica la carta **en su propia línea**. La ficha se paga al tocar Robar y **no se puede cancelar**; tiene **10 s** (`ROB_TIME`, `robLeft`) para ubicarla. Si acierta, la carta es suya; si falla o se le acaba el tiempo, se descarta.
@@ -107,11 +109,7 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (4/5)
-- Canciones sin repetir (también entre partidas, historial en el anfitrión) y varias playlists mezcladas.
-- Robo sin "Cancelar robo": la ficha se paga al tocar Robar y hay 10 s para ubicar la carta; si no, pierde el robo.
-- Ficha automática por canción + artista solo si además acertó el año.
-- Votación de ficha solo si el jugador acertó el año (además de completar canción y artista).
+### Pendientes de consolidar (0/5)
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.
@@ -120,3 +118,4 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 - Un robo por turno, canje de 3 fichas, dónde iba la carta, diseño neón.
 - Votación de ficha, Revelar solo jugador de turno con 5 s, Siguiente turno solo jugador de turno.
 - Marcador con fichas visibles, línea propia de cada jugador, paso Revisar respuesta (✓/✗) con robo en la línea propia y posición oculta, versión visible (`VERSION`) y sin caché en prueba.html, Revelar solo del jugador de turno y automático a los 30 s.
+- Votación y ficha automática solo si acertó el año, robo sin cancelar con 10 s para ubicar, canciones sin repetir (historial entre partidas) y varias playlists, cada celular ve solo su línea con botones para ver las de los demás.

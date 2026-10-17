@@ -964,7 +964,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v7";
+const VERSION = "17-oct v8";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
@@ -1053,7 +1053,7 @@ function render(){
   // Línea propia, para los que no están jugando el turno (cada uno ve sus cartas)
   const myTl = typeof me === "number" && me !== st.cur && st.players[me] && !(st.phase === "reveal" && st.res && st.res.owner === me)
     ? `<section class="mine" style="display:flex;flex-direction:column;gap:10px"><span class="label">Tu línea de tiempo · ${st.players[me].tl.length} ${st.players[me].tl.length === 1 ? "carta" : "cartas"}</span>${tlHTML(st.players[me].tl)}</section>` : "";
-  const foot = myTl + `<div class="foot"><span class="label" style="align-self:center">Ronda ${st.round}${spot()?"":` · quedan ${st.deck.length} canciones`} · v ${VERSION}</span><button class="ghost" data-act="menu">Menú</button></div>`;
+  const foot = myTl + viewerHTML() + `<div class="foot"><span class="label" style="align-self:center">Ronda ${st.round}${spot()?"":` · quedan ${st.deck.length} canciones`} · v ${VERSION}</span><button class="ghost" data-act="menu">Menú</button></div>`;
   const head = `${statusHTML()}${hostPanel()}${scoreHTML()}`;
 
   if (menuOpen){
@@ -1101,10 +1101,10 @@ function render(){
     </section>
     ${msgHTML()}${st.note?`<div class="banner">${esc(st.note)}</div>`:""}
     ${!spot()&&guessing&&p.tk>=3?`<button class="gold" data-act="buy">Canjear 3 fichas por una carta</button>`:""}
-    <section style="display:flex;flex-direction:column;gap:10px">
-      <span class="label">${guessing?(st.slot==null?"Toca dónde crees que va":"Tu elección"):`Línea de ${esc(p.name)}${st.slot==null?" · eligiendo…":""}`}</span>
-      ${tlHTML(p.tl,{pick:guessing&&(!spot()||st.heard),sel:guessing?st.slot:null})}
-    </section>
+    ${guessing?`<section style="display:flex;flex-direction:column;gap:10px">
+      <span class="label">${st.slot==null?"Toca dónde crees que va":"Tu elección"}</span>
+      ${tlHTML(p.tl,{pick:!spot()||st.heard,sel:st.slot})}
+    </section>`:""}
     ${guessing&&(!spot()||st.heard)?(()=>{const k=st.round+":"+st.cur;if(guessDraft.k!==k)guessDraft={t:"",a:"",k};return `<section class="panel"><span class="label">¿Sabes cuál es? (opcional)</span>
       <div class="prow"><input id="gTitle" data-act="gTitle" placeholder="Nombre de la canción" autocomplete="off" value="${esc(guessDraft.t)}">${micBtn("t","Dictar canción")}</div>
       <div class="prow"><input id="gArtist" data-act="gArtist" placeholder="Artista o banda" autocomplete="off" value="${esc(guessDraft.a)}">${micBtn("a","Dictar artista")}</div>
@@ -1125,7 +1125,7 @@ function render(){
       ${mine?`<button class="primary big" data-act="check" ${st.req?"disabled":""}>Revisar respuesta</button>`:""}
       ${waitingHost}</section>
     ${msgHTML()}
-    <section style="display:flex;flex-direction:column;gap:10px"><span class="label">Línea de ${esc(p.name)}</span>${tlHTML(p.tl,{sel:(allHere()||me===st.cur)?st.slot:null})}</section>${foot}`;
+    ${(allHere()||me===st.cur)?`<section style="display:flex;flex-direction:column;gap:10px"><span class="label">Tu elección</span>${tlHTML(p.tl,{sel:st.slot})}</section>`:""}${foot}`;
     return;
   }
   if (st.phase === "steal"){
@@ -1164,7 +1164,7 @@ ${foot}`;
     <section class="panel"><span class="label">Robo</span>
       <div class="steals">${stealUI}</div>
     </section>
-    <section style="display:flex;flex-direction:column;gap:10px"><span class="label">Línea de ${esc(p.name)}</span>${tlHTML(p.tl,{sel:showMine?st.slot:null})}</section>
+    ${showMine?`<section style="display:flex;flex-direction:column;gap:10px"><span class="label">Tu elección</span>${tlHTML(p.tl,{sel:st.slot})}</section>`:""}
     ${msgHTML()}${waitingHost}
     ${revealBtnHTML(p)}${foot}`;
     return;
@@ -1212,6 +1212,18 @@ ${foot}`;
   }
 }
 let showInvite = false;
+let viewTl = null; // línea de otro jugador que este celular está mirando (solo en este celular)
+// Botones para mirar la línea de tiempo de los demás jugadores
+function viewerHTML(){
+  if (!st || !st.players) return "";
+  const self = allHere() ? null : me;
+  const list = st.players.map((q, i) => ({ q, i })).filter(o => o.i !== self);
+  if (!list.length) return "";
+  if (viewTl != null && (!st.players[viewTl] || viewTl === self)) viewTl = null;
+  const chips = list.map(o => `<button class="${viewTl===o.i?"gold":"ghost"} mini" data-act="viewTl" data-i="${o.i}">${esc(o.q.name)} · ${o.q.tl.length}</button>`).join("");
+  const shown = viewTl != null ? `<div style="display:flex;flex-direction:column;gap:10px"><span class="label">Línea de ${esc(st.players[viewTl].name)}</span>${tlHTML(st.players[viewTl].tl)}</div>` : "";
+  return `<section class="panel" style="display:flex;flex-direction:column;gap:10px"><span class="label">Ver la línea de otro jugador</span><div class="row" style="flex-wrap:wrap;gap:6px">${chips}</div>${shown}</section>`;
+}
 let reqSeen = { id: null, t: 0 };
 
 // ===== Cuenta regresiva (actualiza solo el contador, sin redibujar la pantalla) =====
@@ -1253,6 +1265,7 @@ document.addEventListener("click", e => {
     case "leave": if (client) client.end(true); client = null; room = null; st = null; received = false; menuOpen = false; conn = "off"; history.replaceState(null, "", selfUrl(null)); render(); return;
     case "copy": { const url = REDIRECT + "?sala=" + room; (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => { el.textContent = "Link copiado" }).catch(() => { el.textContent = url }); return }
     case "invite": showInvite = !showInvite; render(); return;
+    case "viewTl": viewTl = viewTl === i ? null : i; render(); return;
     case "saveCid": { const v = (document.getElementById("cid")?.value || "").trim(); if (v){ ls.set("spotifyClientId", v); render() } return }
     case "spLogin": spotifyLogin(); return;
     case "add": setup.names.push(""); ls.set("setup", setup); render(); return;
