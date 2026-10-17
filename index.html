@@ -507,6 +507,25 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 // Canciones de la playlist (se cargan una vez). Así el juego elige y pone la canción directo, sin pasar por otras.
 let plCache = { id: null, tracks: null };
 let plWarn = null;
+// Revisión de playlists al crear la partida: cuántas canciones puede leer el juego de cada una
+let plCheck = { key: null, rows: null, busy: false };
+function plCheckHTML(){
+  if (plCheck.busy) return `<p class="muted" style="font-size:.85rem">Revisando playlists…</p>`;
+  if (!plCheck.rows || plCheck.key !== setup.playlist) return "";
+  return plCheck.rows.map(r => `<p style="font-size:.85rem;margin:4px 0;color:${r.n > 0 ? "var(--ok)" : "var(--bad)"}">${r.n > 0 ? "✓" : "✗"} ${esc(r.name)}: ${r.n > 0 ? r.n + " canciones" : esc(r.err)}</p>`).join("");
+}
+async function checkPlaylists(){
+  plCheck = { key: setup.playlist, rows: null, busy: true }; render();
+  const rows = [];
+  for (const uri of playlistUris(setup.playlist)){
+    const id = uri.split(":")[2]; let name = "Playlist " + id.slice(0, 6) + "…", n = 0, err = "";
+    try { const m = await sp("GET", "/playlists/" + id + "?fields=name"); if (m && m.name) name = m.name } catch (e) {}
+    try { const j = await sp("GET", "/playlists/" + id + "/items?limit=1"); n = (j && j.total) || 0; if (!n) err = "Spotify no deja leer sus canciones (no es tuya ni colaborativa). Cópiala a una playlist tuya." }
+    catch (e) { err = e && (e.code === 403 || e.code === 404) ? "Spotify no deja leer sus canciones (no es tuya ni colaborativa). Cópiala a una playlist tuya." : "No se pudo revisar (" + ((e && e.code) || "error") + ")." }
+    rows.push({ name, n, err });
+  }
+  plCheck = { key: setup.playlist, rows, busy: false }; render();
+}
 async function loadPlaylist(){
   const uris = playlistUris(st.playlist);
   const id = uris.join(",");
@@ -645,8 +664,13 @@ async function hostPlayTurn(){
 }
 async function hostStart(){
   const dev = await pickDevice();
-  const uri = playlistUris(st.playlist)[0];
-  await sp("PUT", "/me/player/play?device_id=" + dev, { context_uri: uri });
+  const uris = playlistUris(st.playlist);
+  const uri = uris[Math.floor(Math.random() * uris.length)];
+  // Respaldo cuando no se puede leer la playlist: parte en una canción al azar (antes partía siempre desde la primera y se repetían)
+  let total = 0; try { const j = await sp("GET", "/playlists/" + uri.split(":")[2] + "/items?limit=1"); total = (j && j.total) || 0 } catch (e) {}
+  const pos = Math.floor(Math.random() * (total || 40));
+  try { await sp("PUT", "/me/player/play?device_id=" + dev, { context_uri: uri, offset: { position: pos } }) }
+  catch (e) { await sp("PUT", "/me/player/play?device_id=" + dev, { context_uri: uri }) }
   await wait(600);
   try { await sp("PUT", "/me/player/shuffle?state=true&device_id=" + dev) } catch (e) {}
   await wait(400);
@@ -1076,7 +1100,7 @@ function drawQR(){
   el.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-const VERSION = "17-oct v28";
+const VERSION = "17-oct v29";
 function render(){
   const app = $app();
   checkGame();
@@ -1118,6 +1142,7 @@ function render(){
           <option value="manual" ${setup.src==="manual"?"selected":""}>Un DJ busca cada canción</option>
         </select></label>
       ${setup.src==="spotify"?`<label class="field"><span class="label">Playlists de Spotify (links, una por línea)</span><textarea id="pl" data-act="playlist" rows="3" autocapitalize="off" autocorrect="off" spellcheck="false">${esc(setup.playlist)}</textarea><span class="muted" style="font-size:.8rem">Puedes pegar varias: se mezclan todas las canciones.</span></label>
+        ${tok()?`<div id="plcheck">${plCheckHTML()}</div><button class="ghost" data-act="plCheck" type="button">Revisar playlists</button>`:""}
         <label class="field"><span class="label">Tiempo para responder</span>
           <select id="clip" data-act="clip">${[[10,"10 segundos"],[15,"15 segundos"],[20,"20 segundos"],[30,"30 segundos"],[0,"Sin límite"]].map(([v,t])=>`<option value="${v}" ${v==setup.clip?"selected":""}>${t}</option>`).join("")}</select></label>
         ${setup.clip?`<label class="field"><span class="label">Parte de la canción</span>
@@ -1396,6 +1421,7 @@ document.addEventListener("click", e => {
     case "spLogin": spotifyLogin(); return;
     case "add": setup.names.push(""); ls.set("setup", setup); render(); return;
     case "rm": setup.names.splice(i, 1); ls.set("setup", setup); render(); return;
+    case "plCheck": checkPlaylists(); return;
     case "start": if (setup.src === "spotify" && (!clientId() || !tok())){ document.querySelector('[data-act="spLogin"],#cid')?.scrollIntoView({ block:"center" }); return } startGame(); keepAwake(); break;
     case "iam": {
       if (el.dataset.i === "todos"){ releaseMine(); setMe("todos"); commit(); render(); return }
