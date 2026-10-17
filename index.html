@@ -350,7 +350,9 @@ let isHost = room ? !!ls.get("host:" + room) : false;
 let conn = "off";         // off | connecting | on | error
 let client = null, topic = null, handledReq = null, hostBusy = false;
 
-function setMe(v){ me = v; ls.set("me:" + room, v) }
+function setMe(v){ me = v; ls.set("me:" + room, v); ls.set("meGid:" + room, v != null && st ? st.gid || null : null) }
+// Partida nueva en la misma sala (otro gid): cada celular vuelve a elegir quién es
+function checkGame(){ if (st && st.gid && me != null && ls.get("meGid:" + room) !== st.gid) setMe(null) }
 // Cada celular tiene un id propio: así un nombre elegido queda bloqueado para los demás
 const DEV = ls.get("devId") || (() => { const d = Math.random().toString(36).slice(2, 10); ls.set("devId", d); return d })();
 const claimOf = i => (st && st.claimed || {})[i];
@@ -382,6 +384,7 @@ function connectRoom(brokerIdx = 0){
     if (myVote && st && st.phase === "reveal" && st.round + ":" + st.cur === myVote.key && typeof me === "number" && !st.voteWon && (st.votes || {})[me] !== myVote.val){
       if (applyVote(me, myVote.val)) setTimeout(commit, 300 + Math.random() * 400);
     }
+    checkGame();
     if (st && typeof me === "number" && me >= st.players.length) setMe(null);
     // Mi nombre: si otro celular lo tomó, vuelvo a elegir; si nadie lo tiene marcado (partida nueva), lo marco de nuevo
     if (st && typeof me === "number" && st.players[me]){
@@ -826,7 +829,7 @@ function startGame(){
   if (names.length < 2) return;
   const pool = shuffle(S.map((_, i) => i).filter(i => setup.filter === "all" || S[i][3] === setup.filter));
   const src = setup.src;
-  st = { phase:"turn", src, playlist: setup.playlist, players: names.map(n => ({ name:n, tl:[card(pool.pop())], tk: setup.tokens })), cur:0, deck: pool,
+  st = { gid: Math.random().toString(36).slice(2, 10), phase:"turn", src, playlist: setup.playlist, players: names.map(n => ({ name:n, tl:[card(pool.pop())], tk: setup.tokens })), cur:0, deck: pool,
     song: src === "spotify" ? null : card(pool.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false,
     target: setup.target, round:1, used:[], lastUri:null, req:null, msg:null, pending:null, clip: src === "spotify" ? (setup.clip || 0) : 0, clipAt:null, started:false, after: setup.after || "duck", part: setup.part || "random" };
   if (me != null && me !== "todos") setMe(null);
@@ -1073,9 +1076,10 @@ function drawQR(){
   el.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-const VERSION = "17-oct v27";
+const VERSION = "17-oct v28";
 function render(){
   const app = $app();
+  checkGame();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
   if (st && st.phase === "steal" && !st.checked && st.robando == null && st.stealer == null){ st.phase = "check"; st.checkAt = Date.now() }
   // Portada: crear o unirse

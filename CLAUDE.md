@@ -24,6 +24,7 @@ Juego musical estilo **Hitster** para jugar en grupo, cada uno desde su celular.
 - **Sincronización:** MQTT público por WebSocket (`wss://broker.emqx.io:8084/mqtt`, respaldo `broker.hivemq.com`). Tópico `lineadeltiempo-oso-v1/salas/<SALA>/estado`, mensaje **retenido** con todo el estado `st` + `seq` (marca de tiempo). Cada celular publica el estado completo al cambiar algo (`commit()`); se ignoran estados con `seq` menor. Último en escribir gana. Si no hay conexión, el cambio queda pendiente (`dirty`) y se envía al reconectar. El estado también se guarda en `localStorage` (`st:<sala>`).
 - **Sin cuentas:** los amigos entran con QR o `?sala=CODIGO`. El que crea la sala es el **anfitrión** (`host:<sala>` en localStorage).
 - **Nombres bloqueados:** cada celular tiene un id (`DEV`, `devId` en localStorage). Al elegir "Soy X" se guarda `st.claimed[i] = DEV` (`claim`, `releaseMine`, `claimOf`); los demás ven "🔒 X · ya está jugando" deshabilitado. "Cambiar quién soy" libera el nombre. Si dos eligen a la vez, el que pierde vuelve a la lista. El anfitrión tiene "Liberar nombres bloqueados" en el Menú (por si alguien se fue sin liberar).
+- **Partida nueva en la misma sala:** cada partida tiene id `st.gid` (lo crea `startGame`); cada celular guarda `meGid:<sala>`. Si llega una partida con otro `gid`, `checkGame()` borra `me` y vuelve a "¿Quién eres?" (así nadie queda como otro jugador si cambian nombres u orden). Los demás no reescanean el QR: ven "Esperando al anfitrión" y luego la lista.
 - **Spotify solo en el anfitrión:** OAuth PKCE en el navegador. Client ID `f5875de832bf474398389d12b283967d` (app "Línea del Tiempo" en developer.spotify.com, cuenta de Oso, Premium). Redirect URI registrada: `https://osobatteryia.github.io/linea-del-tiempo/` (exacta, sin `index.html`; por eso existe `SP_REDIRECT`). Scopes incluyen `playlist-read-private` (versión de token `SCOPE_V = 2`; si el token es viejo se pide "Reconectar Spotify"). Al conectar desde `prueba.html` vuelve a esa página (`returnTo`).
 - **Pedidos al anfitrión:** los demás celulares escriben `st.req = {type, id}` (`play`, `check`, `reveal`, `buy`); el anfitrión los ejecuta en `hostCheck()` y limpia `st.req`. Si el anfitrión no responde en ~9 s, se muestra aviso con "Cancelar y volver a intentar".
 - Playlist por defecto: `https://open.spotify.com/playlist/4BX1DjvzqAT3GePXKGzyTn` ("Línea del Tiempo Musical: Adivina el Año", privada, de Oso). Al crear la partida se pueden pegar **varias playlists** (una por línea, `playlistUris`); se mezclan sin duplicados (hasta 1000 canciones por playlist).
@@ -114,11 +115,7 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (4/5)
-- Al revelar con robo fallido se muestra a todos dónde iba la carta en la línea del que robó (`missHTML` con `st.sslot`).
-- QR: librería `qrcode-generator` (MIT) incluida dentro de `index.html` (antes `qrcodejs` desde cdnjs, que fallaba); `drawQR` dibuja SVG. En el Menú, el QR aparece arriba y el botón cambia a "Ocultar QR".
-- Quitado el aviso "Spotify no deja cambiar el volumen de este aparato…".
-- Aviso "Hay una versión nueva del juego" (`checkUpdate`: cada 60 s y al volver a la pestaña compara `VERSION` publicado con el cargado; botón Actualizar recarga con `?v=<hora>`).
+### Pendientes de consolidar (0/5)
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.
@@ -131,3 +128,4 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 - Quitado aviso "Año según el álbum…", aviso grande de carta ganada al revisar, canción exige al menos la mitad del nombre, votación con voto fijo y resultado cuando gana el no, votación con llave de sol / llave de fa.
 - Sin votación si la respuesta no se parece, playlists con `/items` (arreglo de repeticiones), interruptor "Pedir votación al grupo" + nombres limpios, interruptor alineado, paleta nueva de prueba con botón en el Menú.
 - Aleatorio sin fugas (`queueBad`, diagnóstico), pantalla final con línea de cada jugador (`winView`), pausa inmediata al cargar canción (iPhone sigue con un instante del comienzo; solución real: Spotify Connect), recuadro de playlists alineado, nombres bloqueados al elegir "¿Quién eres?".
+- Aviso de versión nueva (`checkUpdate`), quitado aviso de volumen de iPhone, QR con librería incluida y arriba del Menú, robo fallido muestra dónde iba en la línea del que robó, partida nueva en la misma sala obliga a elegir nombre otra vez (`st.gid`, `checkGame`).
