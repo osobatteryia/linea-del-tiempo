@@ -139,7 +139,7 @@ setInterval(() => {
   if (!r && room){ room = null; devs.forEach((x, i) => { if (i > 0) x.f.src = "about:blank" }) }
   const cur = api.cur(), phase = api.phase();
   if (r && phase) document.getElementById("hint").textContent = "Cambia de celular con las pestañas. El punto amarillo marca de quién es el turno.";
-  document.getElementById("status").innerHTML = r ? `Sala <b>${r}</b>${phase ? " · " + ({turn:"turno",steal:"robo",reveal:"revelado",needyear:"falta año",win:"fin"}[phase] || phase) : " · sin empezar"}` : "Crea la sala en «Oso»";
+  document.getElementById("status").innerHTML = r ? `Sala <b>${r}</b>${phase ? " · " + ({turn:"turno",check:"revisar",steal:"robo",reveal:"revelado",needyear:"falta año",win:"fin"}[phase] || phase) : " · sin empezar"}` : "Crea la sala en «Oso»";
   devs.forEach((x, k) => { const t = r && cur === k && phase !== "win"; x.b.classList.toggle("turnon", t); x.d.classList.toggle("turnon", t) });
 }, 700);
 

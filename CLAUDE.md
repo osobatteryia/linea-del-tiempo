@@ -50,8 +50,9 @@ Para encontrar algo rápido sin leer todo el archivo: busca el nombre con `grep 
 | Login Spotify | `spotifyLogin`, `spotifyCallback`, `accessToken`; llamadas a la API: `sp()` |
 | Elegir y poner la canción del turno | `loadPlaylist`, `hostPlayTurn`, `loadPausedAt`, `pickDevice`; método antiguo: `hostStart`, `hostNext`, `hostClip` |
 | Fin del fragmento (bajar volumen / pausar) | `afterClip`, `duck`, `unduck`, `pauseClip` |
-| Revelar con Spotify | `hostReveal` (usa `clipTrack:<sala>` guardado) |
-| Pedidos de otros celulares al anfitrión | `request()` → `hostCheck()` (tipos `play`, `reveal`, `buy`) |
+| Revisar respuesta (✓/✗ del año, sin mostrar la canción) | `doCheck`, `checkOwner`, `CHECK_FALLBACK`; con Spotify: `request("check")` → `resolveSong` en el anfitrión |
+| Revelar con Spotify | `hostReveal` = `resolveSong` + `reveal()` (usa `clipTrack:<sala>` guardado) |
+| Pedidos de otros celulares al anfitrión | `request()` → `hostCheck()` (tipos `play`, `check`, `reveal`, `buy`) |
 | Canje de 3 fichas | `grantCard`, `buyFromList`, `hostBuy` |
 | Reglas del turno | `// ===== Reglas =====`: `startGame`, `nextTurn`, `reveal`, `undoReveal` |
 | Cartas y línea de tiempo (HTML) | `slotLabel`, `cardHTML`, `tlHTML`, `missHTML` (dónde iba la carta), `color()` |
@@ -59,13 +60,13 @@ Para encontrar algo rápido sin leer todo el archivo: busca el nombre con `grep 
 | Botón Siguiente turno (solo jugador de turno) | `NEXT_FALLBACK`, `nextOwner`, `nextBtnHTML` |
 | Votación de ficha | `voteInfo`, `voteHTML`, `applyVote`, `myVote` |
 | Marcador, barra de sala, avisos, panel de Spotify, QR | `scoreHTML`, `statusHTML`, `msgHTML`, `hostPanel`, `linkHTML`, `drawQR` |
-| Pantallas | `render()`: portada (`if (!room)`), crear partida (`if (!st)`), menú (`menuOpen`), fases `turn`, `steal`, `needyear`, `reveal`, `win`. Línea propia de cada jugador: `myTl` |
+| Pantallas | `render()`: portada (`if (!room)`), crear partida (`if (!st)`), menú (`menuOpen`), fases `turn`, `check`, `steal`, `needyear`, `reveal`, `win`. Línea propia de cada jugador: `myTl` |
 | Cuenta regresiva y entrega automática al acabarse el tiempo | `timeLeft` + `setInterval` en `// ===== Cuenta regresiva =====` |
 | Botones (todas las acciones) | `document.addEventListener("click"` → `switch (act)` con `case "play"`, `"slot"`, `"confirm"`, `"skip"`, `"buy"`, `"pickStealer"`, `"reveal"`, `"vote"`, `"next"`, etc. |
 | Opciones al crear partida | `document.addEventListener("change"` (`clip`, `after`, `part`, `tokens`, `target`, `src`) |
 | Arranque de la página | `// ===== Inicio =====` |
 
-Fases de `st.phase`: `turn` → `steal` (robo + espera de 5 s) → `reveal` (o `needyear` si falta el año) → `turn` del siguiente… → `win`.
+Fases de `st.phase`: `turn` → `check` (botón Revisar respuesta) → `steal` (✓/✗ a la vista; si falló, 5 s para robar) → `reveal` → `turn` del siguiente… → `win`. Si falta el año sale `needyear` (en la revisión con `st.fromCheck`, o al revelar).
 
 ## Reglas implementadas
 - Cada jugador parte con 1 carta a la vista y N fichas (2 por defecto, máx. 5). Gana quien llega a la meta (10 por defecto).
@@ -73,8 +74,10 @@ Fases de `st.phase`: `turn` → `steal` (robo + espera de 5 s) → `reveal` (o `
 - Casillas opcionales **canción** y **artista** (con micrófono para dictar, español `es-CL`). Si acierta las dos (comparación tolerante a tildes y errores chicos) → +1 ficha automática.
 - **Votación de ficha:** si completó canción y artista pero no acertó las dos, los **demás** votan 👍/👎; se entrega con mayoría de los demás (empate o no votar = no). El jugador de turno no puede darse la ficha. En celular compartido, un solo botón "El grupo decidió darle la ficha". No hay votación si le robaron la carta.
 - **Saltar canción:** 1 ficha.
-- **Robar:** 1 ficha, **un solo robo por turno**; el que roba elige otra posición en la línea del jugador. Si el jugador falla y el que roba acierta, la carta es del que roba. La ficha se gasta siempre.
-- **Revelar:** solo el jugador de turno, tras **5 s** de espera para que los demás roben (respaldo: a los 30 s aparece para todos). Si alguien roba, se revela solo al poner su posición.
+- **Nadie ve dónde puso la carta el jugador de turno** hasta que se revela (solo él, o el celular compartido).
+- **Revisar respuesta:** al terminar el tiempo (o confirmar), el jugador de turno toca "Revisar respuesta" (respaldo: a los 30 s aparece para todos). Todos ven solo **✓ acertó el año** o **✗ falló**; no se ve canción, año ni artista.
+- **Robar:** solo si falló. Hay **5 s**; el primero que toca Robar (1 ficha, **un solo robo por turno**) ubica la carta **en su propia línea**. Si acierta, la carta es suya; si no, se descarta. La ficha se gasta siempre.
+- **Revelar:** solo el jugador de turno (respaldo: 30 s para todos). Si acertó, de inmediato; si falló, cuando el que roba ya ubicó la carta o pasaron los 5 s sin robo. No se revela solo.
 - **Siguiente turno:** solo el jugador que terminó su turno (respaldo: 60 s para todos).
 - **Canjear 3 fichas por una carta:** en su turno, antes de empezar; la carta entra directo a su línea; sigue jugando el turno.
 - Al fallar se muestra **dónde iba la carta** en su línea (✗ Aquí la puso / ✓ Aquí iba).
@@ -104,9 +107,10 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (2/5)
+### Pendientes de consolidar (3/5)
 - Marcador: las fichas de todos los jugadores se ven (las etiquetas pasan a una segunda fila en vez de quedar ocultas a la derecha).
 - Cada jugador ve **su propia línea de tiempo** abajo cuando no es su turno (antes todos veían solo la del jugador de turno y parecía que la primera carta era igual para todos; las cartas iniciales siempre fueron distintas).
+- Nuevo paso **Revisar respuesta** (✓/✗ solo del año), robo solo si falló con 5 s y en la línea propia del que roba, posición del jugador de turno oculta para los demás, revelar recién después del robo.
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.
