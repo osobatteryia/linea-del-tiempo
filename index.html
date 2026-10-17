@@ -713,7 +713,7 @@ function nextTurn(){
   const win = st.players.find(p => p.tl.length >= st.target);
   if (win || (!spot() && !st.deck.length)){ st.phase = "win"; return }
   st.cur = (st.cur + 1) % st.players.length; if (st.cur === 0) st.round++;
-  Object.assign(st, { phase:"turn", song: spot() ? null : card(st.deck.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false, pending:null, guess:null, guessRes:null, autoBonus:false, clipAt:null, timeUp:false, note:null, votes:null, voteWon:false, checkOk:null, checked:false, fromCheck:false, stealAt:null, checkAt:null });
+  Object.assign(st, { phase:"turn", song: spot() ? null : card(st.deck.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false, pending:null, guess:null, guessRes:null, autoBonus:false, clipAt:null, timeUp:false, note:null, votes:null, voteWon:false, checkOk:null, checked:false, fromCheck:false, stealAt:null, checkAt:null, stealDoneAt:null });
 }
 // "Revisar respuesta": dice solo si acertó el año; abre 5 s de robo si falló
 function doCheck(){
@@ -763,30 +763,55 @@ function tlHTML(tl,{pick=false,sel=null,sel2=null,highlight=null}={}){
 // ===== Revelar: solo el jugador de turno, después de 5 s para que los demás alcancen a robar =====
 const STEAL_WINDOW = 5000, REVEAL_FALLBACK = 30000;
 function revealWait(){ return st && st.stealAt && st.stealer == null && !st.checkOk ? st.stealAt + STEAL_WINDOW - Date.now() : 0 }
-function revealOwner(){ return allHere() || me === st.cur || (st.stealAt && Date.now() - st.stealAt > REVEAL_FALLBACK) }
+function revealOwner(){ return allHere() || me === st.cur }
+// Desde cuándo se puede revelar (cerró el robo o el que robó ya ubicó la carta)
+function revealReadyAt(){
+  if (!st || st.phase !== "steal" || st.robando != null || !st.stealAt) return null;
+  if (st.stealer != null) return st.stealDoneAt || st.stealAt;
+  return st.stealAt + STEAL_WINDOW; // si acertó, stealAt ya viene 5 s atrás
+}
+// Segundos que faltan para que se revele solo (30 s después de poder revelar)
+function autoRevealLeft(){ const r = revealReadyAt(); return r == null ? null : r + REVEAL_FALLBACK - Date.now() }
+function doReveal(){
+  if (st.phase !== "steal" || st.robando != null || st.req) return false;
+  if (st.checked && st.song && (st.after || "duck") !== "pause") reveal();
+  else if (spot()) request("reveal"); else reveal();
+  return true;
+}
 function canReveal(){ return st && st.phase === "steal" && st.robando == null && !st.req && revealOwner() && revealWait() <= 0 }
 const CHECK_FALLBACK = 30000;
 function checkOwner(){ return allHere() || me === st.cur || (st.checkAt && Date.now() - st.checkAt > CHECK_FALLBACK) }
+function revealInfoText(w){
+  if (w > 0 && !st.checkOk) return `Tienen ${Math.ceil(w / 1000)} s para robar.`;
+  const a = autoRevealLeft();
+  return `Esperando que ${st.players[st.cur].name} revele la canción` + (a != null && a > 0 ? ` (se revela sola en ${Math.ceil(a / 1000)} s).` : ".");
+}
+function revealLabel(w){
+  if (w > 0) return `Revelar en ${Math.ceil(w / 1000)} s`;
+  const a = autoRevealLeft();
+  return a != null && a > 0 ? `Revelar canción (sola en ${Math.ceil(a / 1000)} s)` : "Revelar canción";
+}
 function revealBtnHTML(p){
   if (!revealOwner()){
     const w = revealWait();
-    return `<p class="muted" id="revealInfo">${w > 0 && !st.checkOk ? `Tienen ${Math.ceil(w / 1000)} s para robar.` : `Esperando que ${esc(p.name)} revele la canción.`}</p>`;
+    return `<p class="muted" id="revealInfo">${esc(revealInfoText(w))}</p>`;
   }
   const w = revealWait();
-  return `<button class="primary" id="revealBtn" data-act="reveal" ${w > 0 || st.req || st.robando != null ? "disabled" : ""}>${w > 0 ? `Revelar en ${Math.ceil(w / 1000)} s` : "Revelar canción"}</button>`;
+  return `<button class="primary" id="revealBtn" data-act="reveal" ${w > 0 || st.req || st.robando != null ? "disabled" : ""}>${revealLabel(w)}</button>`;
 }
 setInterval(() => {
   if (!st || st.phase !== "steal" || menuOpen) return;
   const w = revealWait();
   const b = document.getElementById("revealBtn");
-  if (b){ b.textContent = w > 0 ? `Revelar en ${Math.ceil(w / 1000)} s` : "Revelar canción"; b.disabled = w > 0 || !!st.req || st.robando != null }
+  if (b){ b.textContent = revealLabel(w); b.disabled = w > 0 || !!st.req || st.robando != null }
   const info = document.getElementById("revealInfo");
-  if (info) info.textContent = w > 0 && !st.checkOk ? `Tienen ${Math.ceil(w / 1000)} s para robar.` : `Esperando que ${st.players[st.cur].name} revele la canción.`;
+  if (info) info.textContent = revealInfoText(w);
   const sw = document.getElementById("stealSecs"); if (sw) sw.textContent = Math.max(0, Math.ceil(w / 1000));
   // Al cerrarse la ventana de robo se redibuja una vez (desaparecen los botones Robar)
   if (w <= 0 && document.querySelector('[data-act="pickStealer"]')) render();
-  // Si el jugador de turno no revela en 30 s, el botón aparece para todos
-  if (!b && st.stealAt && Date.now() - st.stealAt > REVEAL_FALLBACK && !st.req) render();
+  // Si el jugador de turno no revela en 30 s, se revela solo (lo hace su celular; si no está, el anfitrión 5 s después)
+  const a = autoRevealLeft();
+  if (a != null && !st.req && ((a <= 0 && revealOwner()) || (a <= -5000 && isHost))){ if (doReveal()){ commit(); render() } }
 }, 250);
 
 setInterval(() => {
@@ -892,7 +917,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v2";
+const VERSION = "17-oct v3";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
@@ -1191,7 +1216,7 @@ document.addEventListener("click", e => {
     case "slot":
       if (st.phase === "turn") st.slot = i;
       else if (st.phase === "steal" && st.robando != null && st.stealer == null && (allHere() || me === st.robando)){
-        st.stealer = st.robando; st.sslot = i; st.players[st.robando].tk--; st.robando = null;
+        st.stealer = st.robando; st.sslot = i; st.players[st.robando].tk--; st.robando = null; st.stealDoneAt = Date.now();
       } else return;
       break;
     case "confirm": if (st.slot == null) return; stopMic(); st.timeUp = false; st.phase = "check"; st.robando = null; st.checkAt = Date.now(); st.guess = { t: guessDraft.t.trim().slice(0,80), a: guessDraft.a.trim().slice(0,80) }; break;
@@ -1208,7 +1233,7 @@ document.addEventListener("click", e => {
     case "pickStealer": if (st.phase === "steal" && !st.checkOk && revealWait() > 0 && st.robando == null && st.stealer == null && st.players[i] && st.players[i].tk > 0 && i !== st.cur) st.robando = i; else return; break;
     case "check": if (st.phase !== "check" || st.req || !checkOwner()) return; if (spot()) request("check"); else doCheck(); break;
     case "cancelSteal": st.robando = null; break;
-    case "reveal": if (!canReveal()) return; if (st.phase === "steal" && st.robando == null && st.checked && st.song && (st.after || "duck") !== "pause"){ reveal(); break } if (st.phase === "steal" && st.robando == null){ if (spot()) request("reveal"); else reveal() } break;
+    case "reveal": if (!canReveal()) return; if (!doReveal()) return; break;
     case "cancelReq": st.req = null; handledReq = null; hostBusy = false; break;
     case "forceReveal": request(st.phase === "check" ? "check" : "reveal", { force: true }); break;
     case "setYear": { const y = parseInt(yearDraft, 10); if (!(y >= 1900 && y <= 2100)){ document.getElementById("yearIn")?.focus(); return }

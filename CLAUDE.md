@@ -24,7 +24,7 @@ Juego musical estilo **Hitster** para jugar en grupo, cada uno desde su celular.
 - **Sincronización:** MQTT público por WebSocket (`wss://broker.emqx.io:8084/mqtt`, respaldo `broker.hivemq.com`). Tópico `lineadeltiempo-oso-v1/salas/<SALA>/estado`, mensaje **retenido** con todo el estado `st` + `seq` (marca de tiempo). Cada celular publica el estado completo al cambiar algo (`commit()`); se ignoran estados con `seq` menor. Último en escribir gana. Si no hay conexión, el cambio queda pendiente (`dirty`) y se envía al reconectar. El estado también se guarda en `localStorage` (`st:<sala>`).
 - **Sin cuentas:** los amigos entran con QR o `?sala=CODIGO`. El que crea la sala es el **anfitrión** (`host:<sala>` en localStorage).
 - **Spotify solo en el anfitrión:** OAuth PKCE en el navegador. Client ID `f5875de832bf474398389d12b283967d` (app "Línea del Tiempo" en developer.spotify.com, cuenta de Oso, Premium). Redirect URI registrada: `https://osobatteryia.github.io/linea-del-tiempo/` (exacta, sin `index.html`; por eso existe `SP_REDIRECT`). Scopes incluyen `playlist-read-private` (versión de token `SCOPE_V = 2`; si el token es viejo se pide "Reconectar Spotify"). Al conectar desde `prueba.html` vuelve a esa página (`returnTo`).
-- **Pedidos al anfitrión:** los demás celulares escriben `st.req = {type, id}` (`play`, `reveal`, `buy`); el anfitrión los ejecuta en `hostCheck()` y limpia `st.req`. Si el anfitrión no responde en ~9 s, se muestra aviso con "Cancelar y volver a intentar".
+- **Pedidos al anfitrión:** los demás celulares escriben `st.req = {type, id}` (`play`, `check`, `reveal`, `buy`); el anfitrión los ejecuta en `hostCheck()` y limpia `st.req`. Si el anfitrión no responde en ~9 s, se muestra aviso con "Cancelar y volver a intentar".
 - Playlist por defecto: `https://open.spotify.com/playlist/4BX1DjvzqAT3GePXKGzyTn` ("Línea del Tiempo Musical: Adivina el Año", privada, de Oso). Se puede cambiar al crear la partida.
 - Lista interna `S` de 150 canciones con año (latinas/chilenas + internacionales), usada para corregir años y como respaldo del canje.
 
@@ -56,7 +56,7 @@ Para encontrar algo rápido sin leer todo el archivo: busca el nombre con `grep 
 | Canje de 3 fichas | `grantCard`, `buyFromList`, `hostBuy` |
 | Reglas del turno | `// ===== Reglas =====`: `startGame`, `nextTurn`, `reveal`, `undoReveal` |
 | Cartas y línea de tiempo (HTML) | `slotLabel`, `cardHTML`, `tlHTML`, `missHTML` (dónde iba la carta), `color()` |
-| Botón Revelar (5 s, solo jugador de turno) | `STEAL_WINDOW`, `revealWait`, `revealOwner`, `canReveal`, `revealBtnHTML` |
+| Botón Revelar (solo jugador de turno, sola a los 30 s) | `STEAL_WINDOW`, `revealWait`, `revealOwner`, `revealReadyAt`, `autoRevealLeft`, `doReveal`, `canReveal`, `revealBtnHTML` |
 | Botón Siguiente turno (solo jugador de turno) | `NEXT_FALLBACK`, `nextOwner`, `nextBtnHTML` |
 | Votación de ficha | `voteInfo`, `voteHTML`, `applyVote`, `myVote` |
 | Marcador, barra de sala, avisos, panel de Spotify, QR | `scoreHTML`, `statusHTML`, `msgHTML`, `hostPanel`, `linkHTML`, `drawQR` |
@@ -77,7 +77,7 @@ Fases de `st.phase`: `turn` → `check` (botón Revisar respuesta) → `steal` (
 - **Nadie ve dónde puso la carta el jugador de turno** hasta que se revela (solo él, o el celular compartido).
 - **Revisar respuesta:** al terminar el tiempo (o confirmar), el jugador de turno toca "Revisar respuesta" (respaldo: a los 30 s aparece para todos). Todos ven solo **✓ acertó el año** o **✗ falló**; no se ve canción, año ni artista.
 - **Robar:** solo si falló. Hay **5 s**; el primero que toca Robar (1 ficha, **un solo robo por turno**) ubica la carta **en su propia línea**. Si acierta, la carta es suya; si no, se descarta. La ficha se gasta siempre.
-- **Revelar:** solo el jugador de turno (respaldo: 30 s para todos). Si acertó, de inmediato; si falló, cuando el que roba ya ubicó la carta o pasaron los 5 s sin robo. No se revela solo.
+- **Revelar:** el botón lo tiene **solo el jugador de turno** (los demás ven "se revela sola en N s"). Se puede si acertó, de inmediato; si falló, cuando el que roba ya ubicó la carta o pasaron los 5 s sin robo. Si no lo toca en **30 s**, se revela sola (`autoRevealLeft`, `doReveal`; lo hace su celular, y si no está, el anfitrión 5 s después).
 - **Siguiente turno:** solo el jugador que terminó su turno (respaldo: 60 s para todos).
 - **Canjear 3 fichas por una carta:** en su turno, antes de empezar; la carta entra directo a su línea; sigue jugando el turno.
 - Al fallar se muestra **dónde iba la carta** en su línea (✗ Aquí la puso / ✓ Aquí iba).
@@ -95,6 +95,7 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 - MQTT público: sin seguridad; cualquiera con el código de sala puede entrar.
 
 ## Cómo probar cambios (en el contenedor)
+- Subir `VERSION` en `index.html` en cada cambio publicado (se ve abajo en la pantalla; sirve para saber si Safari tiene la última).
 - Servidor local con broker MQTT propio (aedes + ws) y Playwright/Chromium; reemplazar en una copia de `index.html` la URL de mqtt y `BROKERS` por `ws://localhost:8888`, y simular Spotify con `context.route("https://api.spotify.com/**", ...)`.
 - En Playwright sync, usar `page.wait_for_timeout()` (no `time.sleep`) para que respondan las rutas simuladas.
 - Siempre `node --check` del script antes de publicar.
@@ -103,15 +104,10 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 - Confirmar con Oso si la carga en pausa eliminó el "comienzo" de la canción en iPhone.
 - Propuesto, sin respuesta: bloquear "Siguiente turno" mientras haya votación de ficha abierta.
 - Propuesto, sin respuesta: si un robo exitoso debe anular también la ficha automática (hoy no la anula).
-- Propuesto, sin respuesta: cerrar el robo a los 5 s (hoy se puede robar hasta que se revela).
 
 ## Registro de cambios
 
-### Pendientes de consolidar (4/5)
-- Marcador: las fichas de todos los jugadores se ven (las etiquetas pasan a una segunda fila en vez de quedar ocultas a la derecha).
-- Cada jugador ve **su propia línea de tiempo** abajo cuando no es su turno (antes todos veían solo la del jugador de turno y parecía que la primera carta era igual para todos; las cartas iniciales siempre fueron distintas).
-- Nuevo paso **Revisar respuesta** (✓/✗ solo del año), robo solo si falló con 5 s y en la línea propia del que roba, posición del jugador de turno oculta para los demás, revelar recién después del robo.
-- Versión visible abajo en la pantalla (`VERSION`, ej. "v 17-oct v2") para saber si Safari tiene la última; `prueba.html` agrega `&v=<hora>` a los iframes para no usar copias guardadas; partidas que quedaron en fase `steal` sin revisar pasan a `check` al abrirse.
+### Pendientes de consolidar (0/5)
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.
@@ -119,3 +115,4 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 - Arreglos de Spotify en iPhone (502, dispositivo dormido, revelar en pausa, carga en pausa, volumen a la mitad).
 - Un robo por turno, canje de 3 fichas, dónde iba la carta, diseño neón.
 - Votación de ficha, Revelar solo jugador de turno con 5 s, Siguiente turno solo jugador de turno.
+- Marcador con fichas visibles, línea propia de cada jugador, paso Revisar respuesta (✓/✗) con robo en la línea propia y posición oculta, versión visible (`VERSION`) y sin caché en prueba.html, Revelar solo del jugador de turno y automático a los 30 s.
