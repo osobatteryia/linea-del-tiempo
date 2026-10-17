@@ -109,7 +109,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (1/5)
+### Pendientes de consolidar (2/5)
+- Al revisar y acertar: aviso grande "🎉 ¡Acertaste! Ganaste esta carta" (los demás: "¡X acertó y ganó esta carta!").
 - Quitado el aviso "Año según el álbum en Spotify… Corregir año" de la pantalla de revelar.
 
 ### Historial
