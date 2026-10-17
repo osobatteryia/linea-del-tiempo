@@ -520,7 +520,7 @@ let plCheck = { key: null, rows: null, busy: false };
 // ===== Editor de playlists (crear partida): una fila por playlist con nombre, cantidad de canciones y botón quitar =====
 const plIds = () => { const out = [], re = /playlist[\/:]([A-Za-z0-9]{10,})/g; let m; while ((m = re.exec(String(setup.playlist || "")))) if (!out.includes(m[1])) out.push(m[1]); return out };
 const setPlIds = ids => { setup.playlist = ids.map(id => "https://open.spotify.com/playlist/" + id).join("\n"); ls.set("setup", setup) };
-let plInfo = ls.get("plInfo", {}), plBusy = {}, plAddMsg = "";
+let plInfo = ls.get("plInfo", {}), plBusy = {}, plAddMsg = "", plDraft = "";
 async function fetchPlInfo(id){
   if (plBusy[id] || !tok()) return; plBusy[id] = true;
   const info = { name: null, n: 0, ok: false, err: "" };
@@ -544,7 +544,7 @@ function plEditorHTML(){
   return `<div class="field"><span class="label">Playlists de Spotify</span>
     <div class="pllist">${rows || `<p class="muted" style="margin:0">No hay playlists: se usará la playlist por defecto.</p>`}</div>
     ${ids.length > 1 && total ? `<p class="muted" style="font-size:.85rem;margin:2px 0 0">En total: <b>${total}</b> canciones (las repetidas cuentan una vez al jugar).</p>` : ""}
-    <div class="pladd"><input id="plNew" placeholder="Pega aquí el link de una playlist" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"><button class="gold" data-act="plAdd" type="button">Agregar</button></div>
+    <div class="pladd"><input id="plNew" data-act="plNew" value="${esc(plDraft)}" placeholder="Pega aquí el link de una playlist" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"><button class="gold" data-act="plAdd" type="button">Agregar</button></div>
     ${plAddMsg ? `<p style="font-size:.85rem;margin:0;color:var(--bad)">${esc(plAddMsg)}</p>` : `<p class="muted" style="font-size:.8rem;margin:0">En Spotify: ··· → Compartir → Copiar enlace. Se mezclan las canciones de todas.</p>`}
   </div>`;
 }
@@ -556,6 +556,7 @@ function plAdd(){
   const ids = plIds(); let added = 0;
   for (const id of found) if (!ids.includes(id)){ ids.push(id); added++ }
   plAddMsg = added ? "" : "Esa playlist ya está en la lista.";
+  plDraft = "";
   setPlIds(ids); render();
 }
 function plCheckHTML(){
@@ -1138,6 +1139,9 @@ function linkHTML(){
     <p>Escaneen el código o entren a <b class="sel">${esc(url)}</b></p>
     <button class="ghost" data-act="copy">Copiar link</button></section>`;
 }
+// El QR se lleva a la vista solo la primera vez que aparece (por sala y pantalla), no en cada redibujo:
+// antes, al conectarse o al revisar playlists, la pantalla saltaba al QR mientras se pegaba un link
+let qrScrolledFor = "";
 function drawQR(){
   const el = document.getElementById("qr");
   if (!el || el.dataset.done) return;
@@ -1146,11 +1150,32 @@ function drawQR(){
     el.innerHTML = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
     el.dataset.done = 1;
   } catch (e) { el.textContent = "No se pudo dibujar el QR: usa el link de abajo." }
+  const key = room + "|" + (st ? "menu" : "setup");
+  if (qrScrolledFor === key) return;
+  qrScrolledFor = key;
+  const f = document.activeElement;
+  if (f && (f.tagName === "INPUT" || f.tagName === "TEXTAREA")) return;
   el.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-const VERSION = "17-oct v30";
+// Redibuja sin perder lo que se está escribiendo: si había un campo activo, lo deja activo, con el cursor y la pantalla donde estaban
 function render(){
+  const a = document.activeElement;
+  const id = a && a.id && (a.tagName === "INPUT" || a.tagName === "TEXTAREA") ? a.id : null;
+  let s0 = null, s1 = null, y = window.scrollY;
+  if (id) try { s0 = a.selectionStart; s1 = a.selectionEnd } catch (e) {}
+  renderView();
+  if (!id) return;
+  const n = document.getElementById(id);
+  if (n && n !== a){
+    try { n.focus({ preventScroll: true }) } catch (e) { n.focus() }
+    try { if (s0 != null) n.setSelectionRange(s0, s1) } catch (e) {}
+  }
+  window.scrollTo(0, y);
+}
+
+const VERSION = "17-oct v31";
+function renderView(){
   const app = $app();
   checkGame();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
@@ -1462,7 +1487,7 @@ document.addEventListener("click", e => {
     case "join": { const c = joinDraft.toUpperCase().replace(/[^A-Z0-9]/g, ""); if (c.length < 3){ document.getElementById("join")?.focus(); return } goRoom(c, false); return }
     case "leave": if (client) client.end(true); client = null; room = null; st = null; received = false; menuOpen = false; conn = "off"; history.replaceState(null, "", selfUrl(null)); render(); return;
     case "copy": { const url = REDIRECT + "?sala=" + room; (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => { el.textContent = "Link copiado" }).catch(() => { el.textContent = url }); return }
-    case "invite": showInvite = !showInvite; render(); return;
+    case "invite": showInvite = !showInvite; qrScrolledFor = ""; render(); return;
     case "palette": try { localStorage.setItem("ldt-paleta", palette() === "nueva" ? "orig" : "nueva") } catch (e) {} applyPalette(); render(); return;
     case "winView": winView = i; render(); return;
     case "viewTl": viewTl = viewTl === i ? null : i; render(); return;
@@ -1528,6 +1553,7 @@ document.addEventListener("input", e => {
   if (a === "playlist"){ setup.playlist = el.value; ls.set("setup", setup) }
   if (a === "year") yearDraft = el.value.replace(/\D/g, "");
   if (a === "joinIn") joinDraft = el.value;
+  if (a === "plNew") plDraft = el.value;
   if (a === "gTitle") guessDraft.t = el.value;
   if (a === "gArtist") guessDraft.a = el.value;
 });

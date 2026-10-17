@@ -116,9 +116,10 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (2/5)
+### Pendientes de consolidar (3/5)
 - Editor de playlists con nombre, cantidad, ✕ para quitar y campo "Agregar" (reemplaza el textarea).
 - Botón "Revisar playlists" al crear la partida; respaldo `hostStart` con posición al azar. Causa probable de repeticiones: playlist no propia (p. ej. la de rock generada por Spotify) → el juego no lee sus canciones y usa el aleatorio de Spotify.
+- La pantalla ya no salta al QR al pegar un link: `drawQR` lleva el QR a la vista solo una vez por sala y pantalla (`qrScrolledFor`; "Mostrar QR" lo reinicia). `render()` ahora envuelve a `renderView()` y conserva el campo activo, el cursor y la posición de la pantalla; el link a medio pegar se guarda en `plDraft`.
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.
