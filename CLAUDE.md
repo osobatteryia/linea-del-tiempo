@@ -117,9 +117,10 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (2/5)
+### Pendientes de consolidar (3/5)
 - iPhone: con v33 salió "[sin reproductor activo]": el play con `uris` apagaba Spotify en segundo plano. Ahora en celulares primero `loadQueueNoPause` (fila + siguiente, sin pausa, confirma que suene; si queda en pausa >3 veces o la cola tiene restos → `loadNoPause`). `spLog` guarda las últimas llamadas a Spotify (método, ruta corta, estado, ×repeticiones) y se agrega al aviso de error para diagnosticar desde la captura de Oso.
 - v34 tampoco sirvió (turno 2: fila+siguiente → pausa sin canción). Oso confirmó que **antes funcionaba en el mismo iPhone**: era el método v18 (pausa + `loadPausedAtV18` sin pausas extra; respaldo play con la canción + ~60 más de la playlist, así Spotify **nunca queda en silencio** entre turnos). Restaurado para celulares (`playPhoneV18`). Para no repetir lo que suena de fondo, al empezar cada turno se anota como escuchada la canción que sonaba (`prevUri` → `markHeard`). `loadQueueNoPause`, `loadNoPause`, `wakeDevice` quedan sin uso en celulares. Lección: en iPhone el problema real es dejar a Spotify en silencio; no mandar solo una canción.
+- Botón Robar con contador adentro: clase `.steal` (número `.stealT` en píldora + barra clara `--p` que se vacía), lo actualiza el `setInterval` de 250 ms de la fase `steal`.
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.

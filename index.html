@@ -33,6 +33,10 @@ button:focus-visible,.btn:focus-visible,input:focus-visible,select:focus-visible
 .ghost{background:transparent;color:var(--fg);border:1.5px solid var(--line)}
 .ghost:hover{border-color:var(--cyan);color:var(--cyan)}
 .gold{background:var(--gold);color:var(--ink)}
+.steal{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;gap:10px}
+.steal::before{content:"";position:absolute;inset:0;width:calc(var(--p,1) * 100%);background:rgba(255,255,255,.28);transition:width .25s linear;pointer-events:none}
+.steal>*{position:relative}
+.steal .stealT{font-family:"Space Mono",monospace;font-weight:700;font-size:1.15em;background:var(--ink);color:var(--gold);border-radius:999px;min-width:2.6em;padding:2px 8px}
 button:disabled{opacity:.35;cursor:not-allowed}
 .row{display:flex;gap:10px;flex-wrap:wrap}
 .row>*{flex:1 1 140px}
@@ -1144,6 +1148,8 @@ setInterval(() => {
   const info = document.getElementById("revealInfo");
   if (info) info.textContent = revealInfoText(w);
   const sw = document.getElementById("stealSecs"); if (sw) sw.textContent = Math.max(0, Math.ceil(w / 1000));
+  // Contador dentro de cada botón Robar: número de segundos y barra que se va vaciando
+  document.querySelectorAll(".steal").forEach(b => { b.style.setProperty("--p", Math.max(0, Math.min(1, w / STEAL_WINDOW))); const t = b.querySelector(".stealT"); if (t) t.textContent = Math.max(0, Math.ceil(w / 1000)) + " s" });
   // Al cerrarse la ventana de robo se redibuja una vez (desaparecen los botones Robar)
   if (w <= 0 && document.querySelector('[data-act="pickStealer"]')) render();
   // Si el jugador de turno no revela en 30 s, se revela solo (lo hace su celular; si no está, el anfitrión 5 s después)
@@ -1297,7 +1303,7 @@ function render(){
   window.scrollTo(0, y);
 }
 
-const VERSION = "17-oct v35";
+const VERSION = "17-oct v36";
 function renderView(){
   const app = $app();
   checkGame();
@@ -1493,9 +1499,9 @@ ${foot}`;
     else if (!open) stealUI = `<p class="muted">Nadie robó.</p>`;
     else {
       const others = st.players.map((q,i)=>({q,i})).filter(o=>o.i!==st.cur&&o.q.tk>0);
-      const btns = allHere() ? (others.length ? others.map(o=>`<button class="gold" data-act="pickStealer" data-i="${o.i}">Roba ${esc(o.q.name)}</button>`).join("") : `<p class="muted">Nadie tiene fichas para robar.</p>`)
+      const btns = allHere() ? (others.length ? others.map(o=>`<button class="gold steal" data-act="pickStealer" data-i="${o.i}" style="--p:${Math.max(0,Math.min(1,w/STEAL_WINDOW))}"><span>Roba ${esc(o.q.name)}</span><span class="stealT">${Math.ceil(w / 1000)} s</span></button>`).join("") : `<p class="muted">Nadie tiene fichas para robar.</p>`)
         : me === st.cur ? `<p class="muted">Los demás pueden robar desde su celular.</p>`
-        : st.players[me].tk > 0 ? `<button class="gold" data-act="pickStealer" data-i="${me}">Robar (1 ficha)</button>` : `<p class="muted">No tienes fichas para robar.</p>`;
+        : st.players[me].tk > 0 ? `<button class="gold steal" data-act="pickStealer" data-i="${me}" style="--p:${Math.max(0,Math.min(1,w/STEAL_WINDOW))}"><span>Robar (1 ficha)</span><span class="stealT">${Math.ceil(w / 1000)} s</span></button>` : `<p class="muted">No tienes fichas para robar.</p>`;
       stealUI = `<p>Quedan <b id="stealSecs">${Math.ceil(w / 1000)}</b> s para robar. El primero que toca Robar ubica la carta en su propia línea; si acierta, es suya.</p>${btns}`;
     }
     app.innerHTML = `${head}${result}
