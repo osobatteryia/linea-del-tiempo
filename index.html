@@ -508,7 +508,7 @@ async function pickDevice(){
   const dev = list.find(x => x.is_active) || list.find(x => x.id === saved) || list[0];
   if (!dev) throw { msg: "No encuentro ningún Spotify abierto. Abre la app de Spotify en el celular del parlante, reproduce algo un segundo y vuelve a intentar." };
   ls.set("spotifyDevice", dev.id);
-  ls.set("spotifyDeviceInfo", { id: dev.id, vol: dev.volume_percent, canVol: dev.supports_volume !== false });
+  ls.set("spotifyDeviceInfo", { id: dev.id, vol: dev.volume_percent, canVol: dev.supports_volume !== false, type: dev.type || "" });
   return dev.id;
 }
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -675,6 +675,32 @@ async function loadDirectAt(dev, t, pos){
   await wait(300);
   await sp("PUT", "/me/player/play?device_id=" + dev);
 }
+// Celulares (sobre todo iPhone): Spotify en segundo plano y en PAUSA se duerme al instante y desaparece de la lista
+// ("No encuentro ningún Spotify abierto"). Por eso en celulares nunca se pausa: se cambia la canción en el aire
+// y se salta al punto elegido. Puede oírse un instante del comienzo (Spotify iOS ignora position_ms).
+const isPhoneDev = () => /smartphone|tablet/i.test((ls.get("spotifyDeviceInfo") || {}).type || "");
+async function loadNoPause(dev, t, pos){
+  await sp("PUT", "/me/player/play?device_id=" + dev, { uris: [t.uri], position_ms: pos });
+  if (!pos) return;
+  for (let k = 0; k < 20; k++){
+    await wait(150);
+    let c = null; try { c = await sp("GET", "/me/player/currently-playing") } catch (e) {}
+    if (!c || !c.item || c.item.uri !== t.uri) continue;
+    if ((c.progress_ms || 0) < pos - 2000){ try { await sp("PUT", "/me/player/seek?position_ms=" + pos + "&device_id=" + dev) } catch (e) {} }
+    break;
+  }
+}
+// Si Spotify se desconectó, intenta despertarlo una vez (solo funciona si sigue en la lista de equipos)
+async function wakeDevice(dev){
+  const d = await sp("GET", "/me/player/devices");
+  const list = (d && d.devices) || [];
+  const found = list.find(x => x.id === dev) || list[0];
+  if (!found) throw { msg: "Spotify se desconectó del iPhone. Abre la app de Spotify, dale play a cualquier canción y vuelve al juego sin pausarla. Después toca Empezar mi turno." };
+  try { await sp("PUT", "/me/player", { device_ids: [found.id], play: true }) } catch (e) {}
+  await wait(800);
+  ls.set("spotifyDevice", found.id);
+  return found.id;
+}
 async function hostPlayTurn(){
   let tracks;
   try { tracks = await loadPlaylist() }
@@ -693,6 +719,16 @@ async function hostPlayTurn(){
   const ctx = playlistUris(st.playlist)[0];
   // Corta la canción anterior justo antes, para que no se mezcle con la nueva
   let prevUri = null; try { const c = await sp("GET", "/me/player/currently-playing"); prevUri = c && c.item && c.item.uri } catch (e) {}
+  if (isPhoneDev()){
+    try { await loadNoPause(dev, t, pos) }
+    catch (e) { if (e && e.code === 404){ const d2 = await wakeDevice(dev); await loadNoPause(d2, t, pos) } else throw e }
+    ls.set("clipTrack:" + room, { uri: t.uri, name: t.name, artists: t.artists, date: t.date, turn: st.round + ":" + st.cur });
+    st.started = true;
+    st.clipAt = len ? Date.now() : null;
+    clearTimeout(clipTimer);
+    if (len){ clipDeadline = Date.now() + len * 1000; clipTimer = setTimeout(afterClip, len * 1000) }
+    return;
+  }
   try { await sp("PUT", "/me/player/pause?device_id=" + dev) } catch (e) {}
   // En iPhone, Spotify ignora el punto de inicio al cargar una canción nueva y suena el comienzo.
   // Para evitarlo: se carga la canción en pausa (cola + siguiente), se mueve al punto y recién ahí se reproduce.
@@ -1174,7 +1210,7 @@ function render(){
   window.scrollTo(0, y);
 }
 
-const VERSION = "17-oct v31";
+const VERSION = "17-oct v32";
 function renderView(){
   const app = $app();
   checkGame();
