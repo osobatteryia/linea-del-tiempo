@@ -35,6 +35,38 @@ Juego musical estilo **Hitster** para jugar en grupo, cada uno desde su celular.
 4. Al terminar el tiempo, el volumen baja a la mitad (`duck`) y vuelve en el próximo turno. **En iPhone Spotify no permite cambiar el volumen** → se avisa al anfitrión ("Entendido" desactiva). **No se pausa** por defecto: en iPhone, Spotify en pausa y en segundo plano se desconecta ("No encuentro ningún Spotify abierto").
 5. Al revelar, el anfitrión usa la canción que guardó al empezar (`clipTrack:<sala>`), no lo que diga Spotify.
 
+## Mapa del código (`index.html`)
+Para encontrar algo rápido sin leer todo el archivo: busca el nombre con `grep -n "nombre" index.html`. Los números de línea son aproximados (cambian con cada edición); confía en los nombres.
+
+| Tema | Dónde buscar |
+|---|---|
+| Lista interna de 150 canciones | `const S=[` (~línea 130) |
+| Configuración (Client ID, playlist, brokers MQTT, `NS`) | sección `// ===== Configuración =====` |
+| Modo de pruebas (`perfil`, `soy`, `nombres`, `STORE`, `selfUrl`) | justo debajo de Configuración |
+| Comparar canción/artista escritos (tolerante a errores) | `norm`, `findInDB`, `lev`, `close`, `guessTitle`, `guessArtist` |
+| Micrófono / dictado | `// ===== Dictado por voz =====`: `micBtn`, `startMic`, `stopMic` |
+| Estado (`st`, `setup`, `me`, `isHost`, `room`) | `// ===== Estado =====` |
+| Conexión entre celulares (MQTT) | `connectRoom`, `commit`, `flush`, `saveLocal` |
+| Login Spotify | `spotifyLogin`, `spotifyCallback`, `accessToken`; llamadas a la API: `sp()` |
+| Elegir y poner la canción del turno | `loadPlaylist`, `hostPlayTurn`, `loadPausedAt`, `pickDevice`; método antiguo: `hostStart`, `hostNext`, `hostClip` |
+| Fin del fragmento (bajar volumen / pausar) | `afterClip`, `duck`, `unduck`, `pauseClip` |
+| Revelar con Spotify | `hostReveal` (usa `clipTrack:<sala>` guardado) |
+| Pedidos de otros celulares al anfitrión | `request()` → `hostCheck()` (tipos `play`, `reveal`, `buy`) |
+| Canje de 3 fichas | `grantCard`, `buyFromList`, `hostBuy` |
+| Reglas del turno | `// ===== Reglas =====`: `startGame`, `nextTurn`, `reveal`, `undoReveal` |
+| Cartas y línea de tiempo (HTML) | `slotLabel`, `cardHTML`, `tlHTML`, `missHTML` (dónde iba la carta), `color()` |
+| Botón Revelar (5 s, solo jugador de turno) | `STEAL_WINDOW`, `revealWait`, `revealOwner`, `canReveal`, `revealBtnHTML` |
+| Botón Siguiente turno (solo jugador de turno) | `NEXT_FALLBACK`, `nextOwner`, `nextBtnHTML` |
+| Votación de ficha | `voteInfo`, `voteHTML`, `applyVote`, `myVote` |
+| Marcador, barra de sala, avisos, panel de Spotify, QR | `scoreHTML`, `statusHTML`, `msgHTML`, `hostPanel`, `linkHTML`, `drawQR` |
+| Pantallas | `render()`: portada (`if (!room)`), crear partida (`if (!st)`), menú (`menuOpen`), fases `turn`, `steal`, `needyear`, `reveal`, `win`. Línea propia de cada jugador: `myTl` |
+| Cuenta regresiva y entrega automática al acabarse el tiempo | `timeLeft` + `setInterval` en `// ===== Cuenta regresiva =====` |
+| Botones (todas las acciones) | `document.addEventListener("click"` → `switch (act)` con `case "play"`, `"slot"`, `"confirm"`, `"skip"`, `"buy"`, `"pickStealer"`, `"reveal"`, `"vote"`, `"next"`, etc. |
+| Opciones al crear partida | `document.addEventListener("change"` (`clip`, `after`, `part`, `tokens`, `target`, `src`) |
+| Arranque de la página | `// ===== Inicio =====` |
+
+Fases de `st.phase`: `turn` → `steal` (robo + espera de 5 s) → `reveal` (o `needyear` si falta el año) → `turn` del siguiente… → `win`.
+
 ## Reglas implementadas
 - Cada jugador parte con 1 carta a la vista y N fichas (2 por defecto, máx. 5). Gana quien llega a la meta (10 por defecto).
 - Turno: elegir posición (antes / entre / después); mismo año vale a cualquier lado.
