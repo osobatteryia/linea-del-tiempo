@@ -28,6 +28,7 @@ Juego musical estilo **Hitster** para jugar en grupo, cada uno desde su celular.
 - Playlist por defecto: `https://open.spotify.com/playlist/4BX1DjvzqAT3GePXKGzyTn` ("Línea del Tiempo Musical: Adivina el Año", privada, de Oso). Al crear la partida se pueden pegar **varias playlists** (una por línea, `playlistUris`); se mezclan sin duplicados (hasta 1000 canciones por playlist).
 - **Lectura de playlists (cambio de Spotify, feb 2026):** se usa `GET /playlists/{id}/items` (respuesta `items[].item`); `/tracks` quedó eliminado y, al fallar, el juego caía al método antiguo (shuffle de Spotify) y las canciones se repetían. Spotify **solo entrega canciones de playlists propias o colaborativas**; si no puede leer ninguna, se avisa (`plWarn`).
 - **Sin repetir:** `pickFresh` evita canciones ya sonadas en la partida (`st.played`, `st.used`), las que ya son carta de alguien, y las sonadas en partidas anteriores (historial `heardHist` en el anfitrión, `markHeard`). Si ya sonaron todas, elige entre el 25 % más antiguo.
+- Los nombres de Spotify se muestran limpios (`cleanName`: quita "- 2019 Remaster", "(Live)", "- En Vivo", etc.).
 - Lista interna `S` de 150 canciones con año (latinas/chilenas + internacionales), usada para corregir años y como respaldo del canje.
 
 ## Cómo suena cada turno (Spotify)
@@ -75,7 +76,7 @@ Fases de `st.phase`: `turn` → `check` (botón Revisar respuesta) → `steal` (
 - Cada jugador parte con 1 carta a la vista y N fichas (2 por defecto, máx. 5). Gana quien llega a la meta (10 por defecto).
 - Turno: elegir posición (antes / entre / después); mismo año vale a cualquier lado.
 - Casillas opcionales **canción** y **artista** (con micrófono para dictar, español `es-CL`). Si **acertó el año** y acierta las dos (comparación tolerante a tildes, mayúsculas, signos, artículos iniciales, "(Remaster)"/"- …" y ~1 error cada 4 letras; en la **canción** un pedazo del nombre vale solo si es al menos la mitad, ej. "corazon" ya no vale por "Corazón Espinado"; en el **artista** basta una palabra o uno de los artistas) → +1 ficha automática al revelar. Si falló el año, no hay ficha.
-- **Votación de ficha:** solo si **acertó el año** (carta bien ubicada) **y** completó canción y artista, pero no acertó las dos, **y las dos respuestas se parecen** (`near`/`nearArtist`: ≥50 % de parecido letra por letra o una palabra de 4+ letras en común). Si alguna es muy distinta → no hay ficha ni votación (`farOff`); los **demás** votan con llave de sol 𝄞 (dar ficha) / llave de fa 𝄢 (no), clase CSS `.clef`; se entrega con mayoría de los demás (empate o no votar = no). **El voto no se puede cambiar**; apenas los "no" hacen imposible la mayoría se muestra "El grupo decidió no darle la ficha" (`lost` en `voteInfo`). El jugador de turno no puede darse la ficha. En celular compartido, un solo botón "El grupo decidió darle la ficha". No hay votación si le robaron la carta.
+- **Votación de ficha:** solo si **acertó el año** (carta bien ubicada) **y** completó canción y artista, pero no acertó las dos, **y las dos respuestas se parecen** (`near`/`nearArtist`: ≥50 % de parecido letra por letra o una palabra de 4+ letras en común). Si alguna es muy distinta → no hay ficha ni votación (`farOff`), **salvo** que el jugador de turno active el interruptor "Pedir votación al grupo" (`st.voteReq`, `case "voteReq"`; apagado por defecto, no se puede apagar; solo si escribió las dos casillas); los **demás** votan con llave de sol 𝄞 (dar ficha) / llave de fa 𝄢 (no), clase CSS `.clef`; se entrega con mayoría de los demás (empate o no votar = no). **El voto no se puede cambiar**; apenas los "no" hacen imposible la mayoría se muestra "El grupo decidió no darle la ficha" (`lost` en `voteInfo`). El jugador de turno no puede darse la ficha. En celular compartido, un solo botón "El grupo decidió darle la ficha". No hay votación si le robaron la carta.
 - **Saltar canción:** 1 ficha.
 - **Cada celular ve solo su propia línea** (el jugador de turno ve la suya como "Tu elección"). Las líneas de los demás se ven con los botones de "Ver la línea de otro jugador" (`viewerHTML`, `viewTl`, solo en ese celular). Al revelar, todos ven el resultado (dónde iba / línea del que se quedó la carta).
 - **Nadie ve dónde puso la carta el jugador de turno** hasta que se revela (solo él, o el celular compartido).
@@ -110,7 +111,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (2/5)
+### Pendientes de consolidar (3/5)
+- Interruptor "Pedir votación al grupo" para el jugador de turno cuando su respuesta no se parece; nombres de canciones limpios (`cleanName`).
 - Playlists: se lee con `/playlists/{id}/items` (nuevo de Spotify); antes fallaba y caía al shuffle de Spotify (repeticiones). Aviso si la playlist no es propia.
 - Sin votación si la canción o el artista escritos son muy distintos a la respuesta (`near`, `farOff`).
 

@@ -116,6 +116,11 @@ details ol{margin:10px 0 0;padding-left:20px;display:flex;flex-direction:column;
 .wrongslot{border:2px dashed var(--bad);color:var(--bad);border-radius:12px;padding:8px 12px;font-weight:700;text-align:center}
 .votes button{flex:1 1 120px}
 .votecount{font-size:.85rem}
+.switchrow{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:12px 14px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);color:var(--fg);font:inherit;font-weight:600;text-align:left;cursor:pointer}
+.switch{flex:none;width:51px;height:31px;border-radius:999px;background:#3a3a44;position:relative;transition:background .2s}
+.switch span{position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px #0006;transition:left .2s}
+.switch.on{background:#34c759}.switch.on span{left:22px}
+.switchrow.on{border-color:#34c759;cursor:default}
 .clef{font-family:"Apple Symbols","Noto Music","Segoe UI Symbol",serif;font-size:1.6em;line-height:0;vertical-align:-.15em;font-weight:400}
 .checkres{font-family:var(--display);font-weight:800;font-size:1.25rem;text-align:center;padding:14px;border-radius:16px;border:1.5px solid}
 .checkres.ok{color:var(--ok);border-color:var(--ok)}
@@ -264,6 +269,14 @@ function near(g,t){
 function nearArtist(g,a){
   const parts=String(a).split(/,|&| y | and | ft\.? | feat\.? | featuring | x /i).map(x=>x.trim()).filter(Boolean);
   return near(g,a)||parts.some(x=>near(g,x));
+}
+// Nombre limpio para mostrar: quita "- 2019 Remaster", "(Live)", "- Versión en vivo", etc.
+const TAGS=/remaster|remasteriz|version|versión|live|en vivo|mono|stereo|edit|mix|deluxe|bonus|single|acoustic|acústic|from |soundtrack|demo|\b(19|20)\d\d\b/i;
+function cleanName(n){
+  let s=String(n||"");
+  s=s.replace(/\s*[\(\[]([^\)\]]*)[\)\]]/g,(m,x)=>TAGS.test(x)?"":m);
+  s=s.replace(/\s+-\s+(.*)$/,(m,x)=>TAGS.test(x)?"":m);
+  return s.trim()||String(n||"");
 }
 let guessDraft={t:"",a:"",k:""};
 
@@ -674,8 +687,8 @@ async function resolveSong(force){
   let y = m ? m[2] : parseInt(String(it.album && it.album.release_date || "").slice(0, 4), 10);
   const from = m ? "lista" : "spotify";
   st.lastUri = it.uri; st.used.push(it.uri);
-  if (!(y >= 1900 && y <= 2100)){ st.pending = [it.name, artist]; st.phase = "needyear"; return false }
-  st.song = [it.name, artist, y, from];
+  if (!(y >= 1900 && y <= 2100)){ st.pending = [cleanName(it.name), artist]; st.phase = "needyear"; return false }
+  st.song = [cleanName(it.name), artist, y, from];
   return true;
 }
 // El anfitrión ejecuta los pedidos que hacen los demás celulares
@@ -744,7 +757,7 @@ async function hostBuy(){
         const m = findInDB(t.name, artist);
         const y = m ? m[2] : parseInt(String(t.date || "").slice(0, 4), 10);
         if (!(y >= 1900 && y <= 2100) || taken.has(norm(t.name) + "|" + y)) continue;
-        entry = [t.name, artist, y, m ? "lista" : "spotify"]; st.used.push(t.uri); markHeard(t.uri); break;
+        entry = [cleanName(t.name), artist, y, m ? "lista" : "spotify"]; st.used.push(t.uri); markHeard(t.uri); break;
       }
     } catch (e) {}
   }
@@ -773,7 +786,7 @@ function nextTurn(){
   const win = st.players.find(p => p.tl.length >= st.target);
   if (win || (!spot() && !st.deck.length)){ st.phase = "win"; return }
   st.cur = (st.cur + 1) % st.players.length; if (st.cur === 0) st.round++;
-  Object.assign(st, { phase:"turn", song: spot() ? null : card(st.deck.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false, pending:null, guess:null, guessRes:null, autoBonus:false, clipAt:null, timeUp:false, note:null, votes:null, voteWon:false, checkOk:null, checked:false, fromCheck:false, stealAt:null, checkAt:null, stealDoneAt:null });
+  Object.assign(st, { phase:"turn", song: spot() ? null : card(st.deck.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false, pending:null, guess:null, guessRes:null, autoBonus:false, clipAt:null, timeUp:false, note:null, votes:null, voteWon:false, checkOk:null, checked:false, fromCheck:false, stealAt:null, checkAt:null, stealDoneAt:null, voteReq:false });
 }
 // "Revisar respuesta": dice solo si acertó el año; abre 5 s de robo si falló
 function doCheck(){
@@ -910,7 +923,7 @@ setInterval(() => {
 // Si el jugador completó canción y artista pero el juego no le dio la ficha, los demás votan.
 // Se entrega cuando vota "sí" la mayoría de los demás jugadores (empate o no votar = no).
 // Respuesta muy distinta en canción o artista: no hay votación
-function farOff(){ const r = st.guessRes; return !!r && !(r.nt === undefined) && !(r.nt && r.na) }
+function farOff(){ const r = st.guessRes; return !st.voteReq && !!r && !(r.nt === undefined) && !(r.nt && r.na) }
 function voteInfo(){
   const p = st.players[st.cur];
   const voters = st.players.length - 1;
@@ -928,17 +941,23 @@ function voteHTML(p){
   if (st.res && st.res.stolen) return `<p class="muted">Como ${esc(st.players[st.stealer].name)} le robó la carta, no hay votación de ficha.</p>`;
   if (!(st.res && st.res.ok)) return `<p class="muted">Como ${esc(p.name)} no acertó el año, no gana ficha (ni hay votación).</p>`;
   if (!(st.guess && st.guess.t && st.guess.a)) return `<p class="muted">Para votar la ficha, ${esc(p.name)} tenía que acertar el año y completar canción y artista.</p>`;
-  if (farOff()) return `<p class="muted">${!st.guessRes.nt && !st.guessRes.na ? "La canción y el artista" : !st.guessRes.nt ? "La canción" : "El artista"} no se parece${!st.guessRes.nt && !st.guessRes.na ? "n" : ""} a la respuesta. No hay ficha ni votación.</p>`;
+  if (farOff()){
+    const why = `<p class="muted">${!st.guessRes.nt && !st.guessRes.na ? "La canción y el artista" : !st.guessRes.nt ? "La canción" : "El artista"} no se parece${!st.guessRes.nt && !st.guessRes.na ? "n" : ""} a la respuesta. No hay ficha ni votación.</p>`;
+    if (p.tk >= 5) return why;
+    if (allHere() || me === st.cur) return why + `<button class="switchrow" data-act="voteReq" role="switch" aria-checked="false"><span>Pedir votación al grupo</span><span class="switch"><span></span></span></button><p class="muted" style="font-size:.8rem">Si lo activas, los demás votan si te dan la ficha. No se puede apagar.</p>`;
+    return why;
+  }
   const v = voteInfo();
-  if (st.voteWon) return `<p class="verdict ok" style="font-size:1.1rem">¡El grupo le dio la ficha! +1</p>`;
-  if (v.lost) return `<p class="verdict bad" style="font-size:1.1rem">El grupo decidió no darle la ficha.</p><p class="muted votecount"><span class="clef">𝄞</span> ${v.yes} · <span class="clef">𝄢</span> ${v.no} de ${v.voters}</p>`;
+  const asked = st.voteReq ? `<div class="switchrow on" aria-disabled="true"><span>${esc(p.name)} pidió votación al grupo</span><span class="switch on"><span></span></span></div>` : "";
+  if (st.voteWon) return asked + `<p class="verdict ok" style="font-size:1.1rem">¡El grupo le dio la ficha! +1</p>`;
+  if (v.lost) return asked + `<p class="verdict bad" style="font-size:1.1rem">El grupo decidió no darle la ficha.</p><p class="muted votecount"><span class="clef">𝄞</span> ${v.yes} · <span class="clef">𝄢</span> ${v.no} de ${v.voters}</p>`;
   if (p.tk >= 5) return `<p class="muted">${esc(p.name)} ya tiene 5 fichas, el máximo.</p>`;
   const count = `<p class="muted votecount"><span class="clef">𝄞</span> ${v.yes} · <span class="clef">𝄢</span> ${v.no} · faltan ${v.voters - v.yes - v.no} · se necesitan ${v.need} sí</p>`;
   if (allHere()) return `<p>¿Estaba bien? Voten a mano alzada.</p><button class="gold" data-act="voteAll">El grupo decidió darle la ficha</button>`;
-  if (me === st.cur) return `<p>El grupo está votando si te dan la ficha.</p>${count}`;
+  if (me === st.cur) return asked + `<p>El grupo está votando si te dan la ficha.</p>${count}`;
   const mine = v.votes[me];
-  if (mine === true || mine === false) return `<p>Tu voto: <b>${mine ? '<span class="clef">𝄞</span> Dar ficha' : '<span class="clef">𝄢</span> No'}</b> (no se puede cambiar). Esperando a los demás.</p>${count}`;
-  return `<p>¿Le dan la ficha a ${esc(p.name)}? Comparen lo que escribió con la respuesta.</p>
+  if (mine === true || mine === false) return asked + `<p>Tu voto: <b>${mine ? '<span class="clef">𝄞</span> Dar ficha' : '<span class="clef">𝄢</span> No'}</b> (no se puede cambiar). Esperando a los demás.</p>${count}`;
+  return asked + `<p>¿Le dan la ficha a ${esc(p.name)}? Comparen lo que escribió con la respuesta.</p>
     <div class="row votes"><button class="${mine===true?"gold":"ghost"}" data-act="vote" data-v="1"><span class="clef">𝄞</span> Dar ficha</button><button class="${mine===false?"primary":"ghost"}" data-act="vote" data-v="0"><span class="clef">𝄢</span> No</button></div>${count}`;
 }
 function applyVote(i, val){
@@ -1002,7 +1021,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v15";
+const VERSION = "17-oct v16";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
@@ -1339,6 +1358,9 @@ document.addEventListener("click", e => {
     case "fixYear": yearDraft = String(st.song[2]); st.pending = [st.song[0], st.song[1]]; undoReveal(); st.phase = "needyear"; break;
     case "vote": { if (typeof me !== "number") return; const val = el.dataset.v === "1";
       if (!applyVote(me, val)) return; myVote = { key: st.round + ":" + st.cur, val }; break }
+    case "voteReq": { if (!st || st.phase !== "reveal" || st.voteReq || !(allHere() || me === st.cur)) return;
+      const r = st.guessRes; if (!(st.res && st.res.ok && !st.res.stolen && st.guess && st.guess.t && st.guess.a && r && !st.autoBonus)) return;
+      st.voteReq = true; break }
     case "voteAll": { if (!allHere() || st.voteWon || !voteInfo().eligible) return; st.voteWon = true; st.bonus = true; const p = st.players[st.cur]; p.tk = Math.min(5, p.tk + 1); break }
     case "next": if (st.phase === "reveal" && nextOwner()) nextTurn(); else return; break;
     case "end": st.phase = "win"; menuOpen = false; break;
