@@ -72,8 +72,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (0/5)
-- (vacío)
+### Pendientes de consolidar (1/5)
+- Marcador: las fichas de todos los jugadores se ven (las etiquetas pasan a una segunda fila en vez de quedar ocultas a la derecha).
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.
