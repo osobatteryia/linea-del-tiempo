@@ -25,7 +25,8 @@ Juego musical estilo **Hitster** para jugar en grupo, cada uno desde su celular.
 - **Sin cuentas:** los amigos entran con QR o `?sala=CODIGO`. El que crea la sala es el **anfitrión** (`host:<sala>` en localStorage).
 - **Spotify solo en el anfitrión:** OAuth PKCE en el navegador. Client ID `f5875de832bf474398389d12b283967d` (app "Línea del Tiempo" en developer.spotify.com, cuenta de Oso, Premium). Redirect URI registrada: `https://osobatteryia.github.io/linea-del-tiempo/` (exacta, sin `index.html`; por eso existe `SP_REDIRECT`). Scopes incluyen `playlist-read-private` (versión de token `SCOPE_V = 2`; si el token es viejo se pide "Reconectar Spotify"). Al conectar desde `prueba.html` vuelve a esa página (`returnTo`).
 - **Pedidos al anfitrión:** los demás celulares escriben `st.req = {type, id}` (`play`, `check`, `reveal`, `buy`); el anfitrión los ejecuta en `hostCheck()` y limpia `st.req`. Si el anfitrión no responde en ~9 s, se muestra aviso con "Cancelar y volver a intentar".
-- Playlist por defecto: `https://open.spotify.com/playlist/4BX1DjvzqAT3GePXKGzyTn` ("Línea del Tiempo Musical: Adivina el Año", privada, de Oso). Se puede cambiar al crear la partida.
+- Playlist por defecto: `https://open.spotify.com/playlist/4BX1DjvzqAT3GePXKGzyTn` ("Línea del Tiempo Musical: Adivina el Año", privada, de Oso). Al crear la partida se pueden pegar **varias playlists** (una por línea, `playlistUris`); se mezclan sin duplicados (hasta 1000 canciones por playlist).
+- **Sin repetir:** `pickFresh` evita canciones ya sonadas en la partida (`st.played`, `st.used`), las que ya son carta de alguien, y las sonadas en partidas anteriores (historial `heardHist` en el anfitrión, `markHeard`). Si ya sonaron todas, elige entre el 25 % más antiguo.
 - Lista interna `S` de 150 canciones con año (latinas/chilenas + internacionales), usada para corregir años y como respaldo del canje.
 
 ## Cómo suena cada turno (Spotify)
@@ -48,7 +49,7 @@ Para encontrar algo rápido sin leer todo el archivo: busca el nombre con `grep 
 | Estado (`st`, `setup`, `me`, `isHost`, `room`) | `// ===== Estado =====` |
 | Conexión entre celulares (MQTT) | `connectRoom`, `commit`, `flush`, `saveLocal` |
 | Login Spotify | `spotifyLogin`, `spotifyCallback`, `accessToken`; llamadas a la API: `sp()` |
-| Elegir y poner la canción del turno | `loadPlaylist`, `hostPlayTurn`, `loadPausedAt`, `pickDevice`; método antiguo: `hostStart`, `hostNext`, `hostClip` |
+| Elegir y poner la canción del turno | `loadPlaylist`, `pickFresh`, `markHeard`, `hostPlayTurn`, `loadPausedAt`, `pickDevice`; método antiguo: `hostStart`, `hostNext`, `hostClip` |
 | Fin del fragmento (bajar volumen / pausar) | `afterClip`, `duck`, `unduck`, `pauseClip` |
 | Revisar respuesta (✓/✗ del año, sin mostrar la canción) | `doCheck`, `checkOwner`, `CHECK_FALLBACK`; con Spotify: `request("check")` → `resolveSong` en el anfitrión |
 | Revelar con Spotify | `hostReveal` = `resolveSong` + `reveal()` (usa `clipTrack:<sala>` guardado) |
@@ -106,7 +107,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (3/5)
+### Pendientes de consolidar (4/5)
+- Canciones sin repetir (también entre partidas, historial en el anfitrión) y varias playlists mezcladas.
 - Robo sin "Cancelar robo": la ficha se paga al tocar Robar y hay 10 s para ubicar la carta; si no, pierde el robo.
 - Ficha automática por canción + artista solo si además acertó el año.
 - Votación de ficha solo si el jugador acertó el año (además de completar canción y artista).
