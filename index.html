@@ -116,7 +116,7 @@ details ol{margin:10px 0 0;padding-left:20px;display:flex;flex-direction:column;
 .wrongslot{border:2px dashed var(--bad);color:var(--bad);border-radius:12px;padding:8px 12px;font-weight:700;text-align:center}
 .votes button{flex:1 1 120px}
 .votecount{font-size:.85rem}
-.switchrow{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:12px 14px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);color:var(--fg);font:inherit;font-weight:600;text-align:left;cursor:pointer}
+.switchrow{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;margin:0;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font:inherit;font-weight:600;text-align:left;cursor:pointer}
 .switch{flex:none;width:51px;height:31px;border-radius:999px;background:#3a3a44;position:relative;transition:background .2s}
 .switch span{position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px #0006;transition:left .2s}
 .switch.on{background:#34c759}.switch.on span{left:22px}
@@ -1021,7 +1021,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v16";
+const VERSION = "17-oct v17";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta

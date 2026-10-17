@@ -111,7 +111,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (3/5)
+### Pendientes de consolidar (4/5)
+- Interruptor de votación alineado con las casillas de canción y artista (`box-sizing`, mismo borde y radio).
 - Interruptor "Pedir votación al grupo" para el jugador de turno cuando su respuesta no se parece; nombres de canciones limpios (`cleanName`).
 - Playlists: se lee con `/playlists/{id}/items` (nuevo de Spotify); antes fallaba y caía al shuffle de Spotify (repeticiones). Aviso si la playlist no es propia.
 - Sin votación si la canción o el artista escritos son muy distintos a la respuesta (`near`, `farOff`).
