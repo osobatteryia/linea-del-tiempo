@@ -76,7 +76,7 @@ Fases de `st.phase`: `turn` → `check` (botón Revisar respuesta) → `steal` (
 - **Saltar canción:** 1 ficha.
 - **Nadie ve dónde puso la carta el jugador de turno** hasta que se revela (solo él, o el celular compartido).
 - **Revisar respuesta:** al terminar el tiempo (o confirmar), el jugador de turno toca "Revisar respuesta" (respaldo: a los 30 s aparece para todos). Todos ven solo **✓ acertó el año** o **✗ falló**; no se ve canción, año ni artista.
-- **Robar:** solo si falló. Hay **5 s**; el primero que toca Robar (1 ficha, **un solo robo por turno**) ubica la carta **en su propia línea**. Si acierta, la carta es suya; si no, se descarta. La ficha se gasta siempre.
+- **Robar:** solo si falló. Hay **5 s**; el primero que toca Robar (1 ficha, **un solo robo por turno**) ubica la carta **en su propia línea**. La ficha se paga al tocar Robar y **no se puede cancelar**; tiene **10 s** (`ROB_TIME`, `robLeft`) para ubicarla. Si acierta, la carta es suya; si falla o se le acaba el tiempo, se descarta.
 - **Revelar:** el botón lo tiene **solo el jugador de turno** (los demás ven "se revela sola en N s"). Se puede si acertó, de inmediato; si falló, cuando el que roba ya ubicó la carta o pasaron los 5 s sin robo. Si no lo toca en **30 s**, se revela sola (`autoRevealLeft`, `doReveal`; lo hace su celular, y si no está, el anfitrión 5 s después).
 - **Siguiente turno:** solo el jugador que terminó su turno (respaldo: 60 s para todos).
 - **Canjear 3 fichas por una carta:** en su turno, antes de empezar; la carta entra directo a su línea; sigue jugando el turno.
@@ -106,7 +106,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (2/5)
+### Pendientes de consolidar (3/5)
+- Robo sin "Cancelar robo": la ficha se paga al tocar Robar y hay 10 s para ubicar la carta; si no, pierde el robo.
 - Ficha automática por canción + artista solo si además acertó el año.
 - Votación de ficha solo si el jugador acertó el año (además de completar canción y artista).
 

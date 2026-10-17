@@ -781,7 +781,19 @@ function doReveal(){
   return true;
 }
 function canReveal(){ return st && st.phase === "steal" && st.robando == null && !st.req && revealOwner() && revealWait() <= 0 }
-const CHECK_FALLBACK = 30000;
+const CHECK_FALLBACK = 30000, ROB_TIME = 10000;
+// Tiempo que le queda al que roba para ubicar la carta
+function robLeft(){ return st && st.robando != null && st.robAt ? st.robAt + ROB_TIME - Date.now() : null }
+setInterval(() => {
+  if (!st || st.phase !== "steal" || st.robando == null || menuOpen) return;
+  const left = robLeft(); if (left == null) return;
+  const el = document.getElementById("robSecs"); if (el) el.textContent = Math.max(0, Math.ceil(left / 1000));
+  // Se acabó el tiempo: el robo se pierde (la ficha ya se pagó). Lo hace el celular del que roba; si no está, el anfitrión.
+  if ((left <= 0 && (allHere() || me === st.robando)) || (left <= -3000 && isHost)){
+    st.stealer = st.robando; st.sslot = null; st.robando = null; st.stealDoneAt = Date.now();
+    commit(); render();
+  }
+}, 250);
 function checkOwner(){ return allHere() || me === st.cur || (st.checkAt && Date.now() - st.checkAt > CHECK_FALLBACK) }
 function revealInfoText(w){
   if (w > 0 && !st.checkOk) return `Tienen ${Math.ceil(w / 1000)} s para robar.`;
@@ -920,7 +932,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v5";
+const VERSION = "17-oct v6";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
@@ -1094,9 +1106,10 @@ function render(){
       const mine = allHere() || me === st.robando;
       app.innerHTML = `${head}${result}
       <section class="panel"><span class="label">Robo</span><h2>${mine&&!allHere()?"¿Dónde va en tu línea?":esc(s.name)+(mine?", ¿dónde va en tu línea?":" está robando")}</h2>
-        <p class="muted">${mine?"Ubica la carta en tu propia línea de tiempo. Si aciertas, es tuya.":`Espera a que ${esc(s.name)} ubique la carta en su línea.`}</p></section>
+        <p class="muted">${mine?"Ubica la carta en tu propia línea de tiempo. Si aciertas, es tuya; si fallas, pierdes la carta y la ficha.":`Espera a que ${esc(s.name)} ubique la carta en su línea.`}</p>
+        <div class="checkres bad" style="font-size:1rem">Quedan <b id="robSecs">${Math.max(0, Math.ceil(robLeft() / 1000))}</b> s para ubicarla</div></section>
       ${mine?tlHTML(s.tl,{pick:true}):""}
-      ${mine?`<button class="ghost" data-act="cancelSteal">Cancelar robo</button>`:""}${foot}`;
+${foot}`;
       return;
     }
     const w = revealWait(), open = !st.checkOk && st.stealer == null && w > 0;
@@ -1104,6 +1117,7 @@ function render(){
     if (st.checkOk) stealUI = `<p class="muted">La carta es de ${esc(p.name)}. No hay robo.</p>`;
     else if (st.stealer != null){
       const sn = esc(st.players[st.stealer].name);
+      if (st.sslot == null) stealUI = `<p><b>${sn}</b> robó, pero no ubicó la carta a tiempo. Pierde el robo y la ficha.</p>`; else
       stealUI = `<p><b>${sn}</b> robó y ya ubicó la carta en su línea.</p>` + ((allHere() || me === st.stealer) ? tlHTML(st.players[st.stealer].tl,{sel2:st.sslot}) : "");
     }
     else if (!open) stealUI = `<p class="muted">Nadie robó.</p>`;
@@ -1219,7 +1233,7 @@ document.addEventListener("click", e => {
     case "slot":
       if (st.phase === "turn") st.slot = i;
       else if (st.phase === "steal" && st.robando != null && st.stealer == null && (allHere() || me === st.robando)){
-        st.stealer = st.robando; st.sslot = i; st.players[st.robando].tk--; st.robando = null; st.stealDoneAt = Date.now();
+        st.stealer = st.robando; st.sslot = i; st.robando = null; st.stealDoneAt = Date.now();
       } else return;
       break;
     case "confirm": if (st.slot == null) return; stopMic(); st.timeUp = false; st.phase = "check"; st.robando = null; st.checkAt = Date.now(); st.guess = { t: guessDraft.t.trim().slice(0,80), a: guessDraft.a.trim().slice(0,80) }; break;
@@ -1233,9 +1247,8 @@ document.addEventListener("click", e => {
     case "skip": st.players[st.cur].tk--; st.slot = null; st.heard = false;
       if (spot()) request("play"); else { const n = st.deck.pop(); if (n == null) st.phase = "win"; else st.song = card(n) }
       break;
-    case "pickStealer": if (st.phase === "steal" && !st.checkOk && revealWait() > 0 && st.robando == null && st.stealer == null && st.players[i] && st.players[i].tk > 0 && i !== st.cur) st.robando = i; else return; break;
+    case "pickStealer": if (st.phase === "steal" && !st.checkOk && revealWait() > 0 && st.robando == null && st.stealer == null && st.players[i] && st.players[i].tk > 0 && i !== st.cur){ st.robando = i; st.players[i].tk--; st.robAt = Date.now() } else return; break;
     case "check": if (st.phase !== "check" || st.req || !checkOwner()) return; if (spot()) request("check"); else doCheck(); break;
-    case "cancelSteal": st.robando = null; break;
     case "reveal": if (!canReveal()) return; if (!doReveal()) return; break;
     case "cancelReq": st.req = null; handledReq = null; hostBusy = false; break;
     case "forceReveal": request(st.phase === "check" ? "check" : "reveal", { force: true }); break;
