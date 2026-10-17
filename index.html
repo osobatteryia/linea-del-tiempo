@@ -251,6 +251,20 @@ function guessArtist(g,a){
   const parts=String(a).split(/,|&| y | and | ft\.? | feat\.? | featuring | x /i).map(x=>x.trim()).filter(Boolean);
   return close(g,a)||parts.some(x=>close(g,x));
 }
+// "Parecido": no acertó, pero está cerca (vale la pena que el grupo vote).
+// Cerca = se parece al menos a la mitad letra por letra, o comparte una palabra de 4+ letras.
+function near(g,t){
+  g=norm(g).replace(/^(the|los|las|la|el) /,"");t=norm(t).replace(/^(the|los|las|la|el) /,"");
+  if(g.length<2||!t)return false;
+  if(close(g,t))return true;
+  if(1-lev(g,t)/Math.max(g.length,t.length)>=0.5)return true;
+  const tw=new Set(t.split(" ").filter(w=>w.length>=4));
+  return g.split(" ").some(w=>w.length>=4&&[...tw].some(x=>x===w||(Math.min(w.length,x.length)>=5&&1-lev(w,x)/Math.max(w.length,x.length)>=0.75)));
+}
+function nearArtist(g,a){
+  const parts=String(a).split(/,|&| y | and | ft\.? | feat\.? | featuring | x /i).map(x=>x.trim()).filter(Boolean);
+  return near(g,a)||parts.some(x=>near(g,x));
+}
 let guessDraft={t:"",a:"",k:""};
 
 // ===== Dictado por voz =====
@@ -770,6 +784,7 @@ function reveal(){
   st.res = { ok, stolen, owner }; st.phase = "reveal"; st.robando = null; st.revealAt = Date.now();
   if (st.guess && (st.guess.t || st.guess.a)){
     st.guessRes = { t: !!st.guess.t && guessTitle(st.guess.t, st.song[0]), a: !!st.guess.a && guessArtist(st.guess.a, st.song[1]) };
+    st.guessRes.nt = !!st.guess.t && near(st.guess.t, st.song[0]); st.guessRes.na = !!st.guess.a && nearArtist(st.guess.a, st.song[1]);
     if (ok && st.guessRes.t && st.guessRes.a && !st.bonus){ p.tk = Math.min(5, p.tk + 1); st.bonus = true; st.autoBonus = true }
   } else st.guessRes = null;
 }
@@ -885,6 +900,8 @@ setInterval(() => {
 // ===== Votación de ficha =====
 // Si el jugador completó canción y artista pero el juego no le dio la ficha, los demás votan.
 // Se entrega cuando vota "sí" la mayoría de los demás jugadores (empate o no votar = no).
+// Respuesta muy distinta en canción o artista: no hay votación
+function farOff(){ const r = st.guessRes; return !!r && !(r.nt === undefined) && !(r.nt && r.na) }
 function voteInfo(){
   const p = st.players[st.cur];
   const voters = st.players.length - 1;
@@ -894,7 +911,7 @@ function voteInfo(){
   const no = Object.entries(votes).filter(([k, v]) => v === false && +k !== st.cur).length;
   // Se rechaza cuando ya no alcanzan los sí (aunque falten votos)
   const lost = !st.voteWon && (voters - no) < need;
-  const eligible = !!(st.res && st.res.ok) && !!(st.guess && st.guess.t && st.guess.a) && !st.autoBonus && !(st.res && st.res.stolen) && (p.tk < 5 || st.voteWon);
+  const eligible = !!(st.res && st.res.ok) && !!(st.guess && st.guess.t && st.guess.a) && !farOff() && !st.autoBonus && !(st.res && st.res.stolen) && (p.tk < 5 || st.voteWon);
   return { voters, need, yes, no, lost, votes, eligible };
 }
 function voteHTML(p){
@@ -902,6 +919,7 @@ function voteHTML(p){
   if (st.res && st.res.stolen) return `<p class="muted">Como ${esc(st.players[st.stealer].name)} le robó la carta, no hay votación de ficha.</p>`;
   if (!(st.res && st.res.ok)) return `<p class="muted">Como ${esc(p.name)} no acertó el año, no gana ficha (ni hay votación).</p>`;
   if (!(st.guess && st.guess.t && st.guess.a)) return `<p class="muted">Para votar la ficha, ${esc(p.name)} tenía que acertar el año y completar canción y artista.</p>`;
+  if (farOff()) return `<p class="muted">${!st.guessRes.nt && !st.guessRes.na ? "La canción y el artista" : !st.guessRes.nt ? "La canción" : "El artista"} no se parece${!st.guessRes.nt && !st.guessRes.na ? "n" : ""} a la respuesta. No hay ficha ni votación.</p>`;
   const v = voteInfo();
   if (st.voteWon) return `<p class="verdict ok" style="font-size:1.1rem">¡El grupo le dio la ficha! +1</p>`;
   if (v.lost) return `<p class="verdict bad" style="font-size:1.1rem">El grupo decidió no darle la ficha.</p><p class="muted votecount"><span class="clef">𝄞</span> ${v.yes} · <span class="clef">𝄢</span> ${v.no} de ${v.voters}</p>`;
@@ -975,7 +993,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v13";
+const VERSION = "17-oct v14";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
