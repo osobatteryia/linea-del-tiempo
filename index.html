@@ -12,6 +12,7 @@
 :root{
   --bg:#0b0b10; --surface:#15151f; --line:#2a2a3a; --fg:#f2f2f7; --muted:#a9a9bc; --ink:#0b0b10;
   --accent:#ff3fa4; --gold:#c6ff3d; --cyan:#3de8ff; --ok:#3dffb0; --bad:#ff6b4a;
+  --accent2:#e62e8f; --gold2:#a8e021;
   --display:"Unbounded",ui-sans-serif,system-ui,sans-serif;
   --body:"Space Grotesk",ui-sans-serif,system-ui,sans-serif;
   --mono:"Space Mono",ui-monospace,Menlo,monospace;
@@ -62,8 +63,8 @@ input,select,textarea{font:inherit;color:var(--fg);background:var(--surface);bor
 .card .t{font-weight:700;line-height:1.2;min-width:0}
 .card .a{font-size:.85rem;color:var(--muted);min-width:0}
 .card.new{outline:3px solid var(--fg);outline-offset:2px}
-.mystery{background:repeating-linear-gradient(135deg,var(--accent) 0 12px,#e62e8f 12px 24px);color:var(--ink);border-radius:16px;padding:14px 16px;font-family:var(--display);font-weight:800;font-size:1.2rem;text-align:center}
-.mystery.steal{background:repeating-linear-gradient(135deg,var(--gold) 0 12px,#a8e021 12px 24px);color:var(--ink)}
+.mystery{background:repeating-linear-gradient(135deg,var(--accent) 0 12px,var(--accent2) 12px 24px);color:var(--ink);border-radius:16px;padding:14px 16px;font-family:var(--display);font-weight:800;font-size:1.2rem;text-align:center}
+.mystery.steal{background:repeating-linear-gradient(135deg,var(--gold) 0 12px,var(--gold2) 12px 24px);color:var(--ink)}
 .slot{min-height:40px;padding:8px 12px;border-radius:12px;background:transparent;border:1.5px dashed var(--line);color:var(--muted);font-weight:600;font-size:.9rem;width:100%}
 .slot:hover{border-color:var(--gold);color:var(--gold)}
 .slot.blocked{opacity:.3;pointer-events:none}
@@ -111,11 +112,14 @@ details ol{margin:10px 0 0;padding-left:20px;display:flex;flex-direction:column;
 .mic{flex:0 0 auto;min-height:0;width:52px;padding:0}
 .mic.on{background:var(--bad);border-color:var(--bad);color:var(--ink);animation:pulse 1.2s ease-in-out infinite}
 #micNote:empty{display:none}
-.mystery.steal{background:repeating-linear-gradient(135deg,var(--gold) 0 12px,#a8e021 12px 24px);color:var(--ink)}
+.mystery.steal{background:repeating-linear-gradient(135deg,var(--gold) 0 12px,var(--gold2) 12px 24px);color:var(--ink)}
 .ghostcard{outline:3px dashed var(--ok);outline-offset:2px;opacity:.95}
 .wrongslot{border:2px dashed var(--bad);color:var(--bad);border-radius:12px;padding:8px 12px;font-weight:700;text-align:center}
 .votes button{flex:1 1 120px}
 .votecount{font-size:.85rem}
+/* Paleta nueva: sin naranjos ni amarillos; el error usa rosa, el cian pasa a celeste */
+html.p2{--cyan:#52d4ff;--bad:#ff3fa4;--accent2:#e252ff;--gold2:#9aff52}
+html.p2 .switch.on{background:#3dffb0}html.p2 .switchrow.on{border-color:#3dffb0}
 .switchrow{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;margin:0;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font:inherit;font-weight:600;text-align:left;cursor:pointer}
 .switch{flex:none;width:51px;height:31px;border-radius:999px;background:#3a3a44;position:relative;transition:background .2s}
 .switch span{position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px #0006;transition:left .2s}
@@ -229,7 +233,14 @@ const rid = () => Math.random().toString(36).slice(2, 10);
 const yr = e => e[2];
 const keyOf = e => e ? e[0] + "|" + e[2] : "";
 const card = i => S[i].slice(0, 3);
-function color(y){const d=Math.max(0,Math.min(7,Math.floor((y-1950)/10)));const h=[48,30,10,330,290,195,165,95][d];return `hsl(${h} 100% 66%)`}
+// Paleta "nueva" (solo los colores que eligió Oso): rosa, morado, celeste, turquesa, menta y limas.
+// Se guarda en este navegador (compartida por los 4 celulares de prueba.html). "orig" vuelve a la anterior.
+function palette(){ try { return localStorage.getItem("ldt-paleta") || "nueva" } catch (e) { return "nueva" } }
+const DEC_NEW = ["#c6ff3d","#c6ff3d","#3dffb0","#ff3fa4","#e252ff","#52d4ff","#52ffd4","#9aff52"];
+function color(y){const d=Math.max(0,Math.min(7,Math.floor((y-1950)/10)));if(palette()==="nueva")return DEC_NEW[d];const h=[48,30,10,330,290,195,165,95][d];return `hsl(${h} 100% 66%)`}
+function applyPalette(){ document.documentElement.classList.toggle("p2", palette() === "nueva") }
+applyPalette();
+addEventListener("storage", e => { if (e.key === "ldt-paleta"){ applyPalette(); try { render() } catch (x) {} } });
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function insert(tl,e){tl.push(e);tl.sort((a,b)=>yr(a)-yr(b))}
 function fits(tl,slot,y){const a=tl[slot-1],b=tl[slot];return(a==null||yr(a)<=y)&&(b==null||yr(b)>=y)}
@@ -1021,7 +1032,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v17";
+const VERSION = "17-oct v18";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
@@ -1122,6 +1133,7 @@ function render(){
       ${spot()?`<button class="ghost" data-act="otra">Otra canción en Spotify</button>`:""}
       <button class="ghost" data-act="end">Terminar y ver resultados</button>
       <button class="${confirmReset?"primary":"ghost"}" data-act="again">${confirmReset?"Sí, borrar la partida para todos":"Nueva partida (borra esta)"}</button>
+      <button class="ghost" data-act="palette">Colores: ${palette()==="nueva"?"nuevos (tocar para ver los originales)":"originales (tocar para ver los nuevos)"}</button>
       <button class="ghost" data-act="leave">Salir de la sala</button></section>
       ${showInvite?linkHTML():""}`;
     if (showInvite) drawQR();
@@ -1321,6 +1333,7 @@ document.addEventListener("click", e => {
     case "leave": if (client) client.end(true); client = null; room = null; st = null; received = false; menuOpen = false; conn = "off"; history.replaceState(null, "", selfUrl(null)); render(); return;
     case "copy": { const url = REDIRECT + "?sala=" + room; (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => { el.textContent = "Link copiado" }).catch(() => { el.textContent = url }); return }
     case "invite": showInvite = !showInvite; render(); return;
+    case "palette": try { localStorage.setItem("ldt-paleta", palette() === "nueva" ? "orig" : "nueva") } catch (e) {} applyPalette(); render(); return;
     case "viewTl": viewTl = viewTl === i ? null : i; render(); return;
     case "saveCid": { const v = (document.getElementById("cid")?.value || "").trim(); if (v){ ls.set("spotifyClientId", v); render() } return }
     case "spLogin": spotifyLogin(); return;

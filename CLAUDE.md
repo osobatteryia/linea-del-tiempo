@@ -92,6 +92,7 @@ Fases de `st.phase`: `turn` → `check` (botón Revisar respuesta) → `steal` (
 
 ## Diseño
 Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fondo `#0b0b10`, acentos rosa `#ff3fa4`, lima `#c6ff3d`, cian `#3de8ff`; fuentes Unbounded / Space Grotesk / Space Mono; cartas con brillo de color por década (`color(y)`, variable CSS `--c`).
+- **Paleta nueva (en prueba, activa por defecto):** solo rosa `#ff3fa4`, morado `#e252ff`, celeste `#52d4ff`, turquesa `#52ffd4`, menta `#3dffb0`, lima `#c6ff3d` y verde lima `#9aff52`. Clase `html.p2` (`applyPalette`, `palette()`, guardada en `localStorage["ldt-paleta"]`, compartida entre los 4 celulares de prueba.html). Décadas `DEC_NEW`: 50s y 60s lima, 70s menta, 80s rosa, 90s morado, 2000s celeste, 2010s turquesa, 2020s verde lima. Error (`--bad`) pasa a rosa. En el Menú: botón "Colores: nuevos/originales" para comparar.
 
 ## Limitaciones conocidas
 - iPhone: Spotify ignora el punto de inicio al cargar canción nueva (se mitigó con carga en pausa; Oso aún debe confirmar si desapareció el "comienzo"). No permite volumen remoto. En pausa + segundo plano se desconecta.
@@ -111,11 +112,7 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (4/5)
-- Interruptor de votación alineado con las casillas de canción y artista (`box-sizing`, mismo borde y radio).
-- Interruptor "Pedir votación al grupo" para el jugador de turno cuando su respuesta no se parece; nombres de canciones limpios (`cleanName`).
-- Playlists: se lee con `/playlists/{id}/items` (nuevo de Spotify); antes fallaba y caía al shuffle de Spotify (repeticiones). Aviso si la playlist no es propia.
-- Sin votación si la canción o el artista escritos son muy distintos a la respuesta (`near`, `farOff`).
+### Pendientes de consolidar (0/5)
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.
@@ -126,3 +123,4 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 - Marcador con fichas visibles, línea propia de cada jugador, paso Revisar respuesta (✓/✗) con robo en la línea propia y posición oculta, versión visible (`VERSION`) y sin caché en prueba.html, Revelar solo del jugador de turno y automático a los 30 s.
 - Votación y ficha automática solo si acertó el año, robo sin cancelar con 10 s para ubicar, canciones sin repetir (historial entre partidas) y varias playlists, cada celular ve solo su línea con botones para ver las de los demás.
 - Quitado aviso "Año según el álbum…", aviso grande de carta ganada al revisar, canción exige al menos la mitad del nombre, votación con voto fijo y resultado cuando gana el no, votación con llave de sol / llave de fa.
+- Sin votación si la respuesta no se parece, playlists con `/items` (arreglo de repeticiones), interruptor "Pedir votación al grupo" + nombres limpios, interruptor alineado, paleta nueva de prueba con botón en el Menú.
