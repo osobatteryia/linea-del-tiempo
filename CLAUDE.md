@@ -71,7 +71,7 @@ Fases de `st.phase`: `turn` → `check` (botón Revisar respuesta) → `steal` (
 ## Reglas implementadas
 - Cada jugador parte con 1 carta a la vista y N fichas (2 por defecto, máx. 5). Gana quien llega a la meta (10 por defecto).
 - Turno: elegir posición (antes / entre / después); mismo año vale a cualquier lado.
-- Casillas opcionales **canción** y **artista** (con micrófono para dictar, español `es-CL`). Si acierta las dos (comparación tolerante a tildes y errores chicos) → +1 ficha automática.
+- Casillas opcionales **canción** y **artista** (con micrófono para dictar, español `es-CL`). Si **acertó el año** y acierta las dos (comparación tolerante a tildes y errores chicos) → +1 ficha automática al revelar. Si falló el año, no hay ficha.
 - **Votación de ficha:** solo si **acertó el año** (carta bien ubicada) **y** completó canción y artista, pero no acertó las dos; los **demás** votan 👍/👎; se entrega con mayoría de los demás (empate o no votar = no). El jugador de turno no puede darse la ficha. En celular compartido, un solo botón "El grupo decidió darle la ficha". No hay votación si le robaron la carta.
 - **Saltar canción:** 1 ficha.
 - **Nadie ve dónde puso la carta el jugador de turno** hasta que se revela (solo él, o el celular compartido).
@@ -103,11 +103,11 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 ## Pendientes / ideas abiertas
 - Confirmar con Oso si la carga en pausa eliminó el "comienzo" de la canción en iPhone.
 - Propuesto, sin respuesta: bloquear "Siguiente turno" mientras haya votación de ficha abierta.
-- Propuesto, sin respuesta: si un robo exitoso debe anular también la ficha automática (hoy no la anula).
 
 ## Registro de cambios
 
-### Pendientes de consolidar (1/5)
+### Pendientes de consolidar (2/5)
+- Ficha automática por canción + artista solo si además acertó el año.
 - Votación de ficha solo si el jugador acertó el año (además de completar canción y artista).
 
 ### Historial

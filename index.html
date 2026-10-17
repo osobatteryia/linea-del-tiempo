@@ -733,11 +733,13 @@ function reveal(){
   st.res = { ok, stolen, owner }; st.phase = "reveal"; st.robando = null; st.revealAt = Date.now();
   if (st.guess && (st.guess.t || st.guess.a)){
     st.guessRes = { t: !!st.guess.t && guessTitle(st.guess.t, st.song[0]), a: !!st.guess.a && guessArtist(st.guess.a, st.song[1]) };
-    if (st.guessRes.t && st.guessRes.a && !st.bonus){ p.tk = Math.min(5, p.tk + 1); st.bonus = true; st.autoBonus = true }
+    if (ok && st.guessRes.t && st.guessRes.a && !st.bonus){ p.tk = Math.min(5, p.tk + 1); st.bonus = true; st.autoBonus = true }
   } else st.guessRes = null;
 }
 function undoReveal(){
   if (st.res && st.res.owner != null){ const tl = st.players[st.res.owner].tl; const k = keyOf(st.song); const i = tl.findIndex(e => keyOf(e) === k); if (i >= 0) tl.splice(i, 1) }
+  // Si se corrige el año, la ficha automática se vuelve a calcular
+  if (st.autoBonus){ const p = st.players[st.cur]; p.tk = Math.max(0, p.tk - 1); st.bonus = false; st.autoBonus = false }
   st.res = null;
 }
 
@@ -846,7 +848,7 @@ function voteInfo(){
 function voteHTML(p){
   if (st.autoBonus) return `<p class="verdict ok" style="font-size:1.1rem">¡Adivinó las dos! +1 ficha</p>`;
   if (st.res && st.res.stolen) return `<p class="muted">Como ${esc(st.players[st.stealer].name)} le robó la carta, no hay votación de ficha.</p>`;
-  if (!(st.res && st.res.ok)) return `<p class="muted">Como ${esc(p.name)} no acertó el año, no hay votación de ficha.</p>`;
+  if (!(st.res && st.res.ok)) return `<p class="muted">Como ${esc(p.name)} no acertó el año, no gana ficha (ni hay votación).</p>`;
   if (!(st.guess && st.guess.t && st.guess.a)) return `<p class="muted">Para votar la ficha, ${esc(p.name)} tenía que acertar el año y completar canción y artista.</p>`;
   const v = voteInfo();
   if (st.voteWon) return `<p class="verdict ok" style="font-size:1.1rem">¡El grupo le dio la ficha! +1</p>`;
@@ -918,7 +920,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v4";
+const VERSION = "17-oct v5";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
