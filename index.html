@@ -459,23 +459,32 @@ async function pickDevice(){
 const wait = ms => new Promise(r => setTimeout(r, ms));
 // Canciones de la playlist (se cargan una vez). Así el juego elige y pone la canción directo, sin pasar por otras.
 let plCache = { id: null, tracks: null };
+let plWarn = null;
 async function loadPlaylist(){
   const uris = playlistUris(st.playlist);
   const id = uris.join(",");
   if (plCache.id === id && plCache.tracks) return plCache.tracks;
   const out = [], seen = new Set();
   for (const uri of uris){
-    let url = "/playlists/" + uri.split(":")[2] + "/tracks?limit=100&market=from_token&fields=" + encodeURIComponent("items(track(uri,name,duration_ms,is_playable,artists(name),album(release_date))),next");
-    for (let k = 0; k < 10 && url; k++){
-      let j; try { j = await sp("GET", url) } catch (e) { if (uris.length > 1) break; throw e }
+    // Desde febrero 2026 Spotify usa /playlists/{id}/items (antes /tracks). Se prueba el nuevo y, si falla, el antiguo.
+    const pid = uri.split(":")[2];
+    let url = "/playlists/" + pid + "/items?limit=50&market=from_token", tried = false;
+    for (let k = 0; k < 40 && url; k++){
+      let j;
+      try { j = await sp("GET", url) }
+      catch (e) {
+        if (!tried && k === 0){ tried = true; url = "/playlists/" + pid + "/tracks?limit=100&market=from_token"; k = -1; continue }
+        if (uris.length > 1) break; throw e;
+      }
       for (const it of (j && j.items) || []){
-        const t = it.track;
+        const t = it.item || it.track;
         if (t && t.uri && t.uri.startsWith("spotify:track:") && t.is_playable !== false && !seen.has(t.uri)){ seen.add(t.uri); out.push({ uri: t.uri, name: t.name, ms: t.duration_ms, artists: (t.artists || []).map(a => a.name), date: t.album && t.album.release_date }) }
       }
       url = j && j.next ? j.next.replace("https://api.spotify.com/v1", "") : null;
     }
   }
   plCache = { id, tracks: out };
+  plWarn = out.length ? null : "No pude leer las canciones de la playlist. Spotify solo deja leer playlists que sean tuyas (creadas por ti o colaborativas). Si es de otra persona, ábrela en Spotify, toca ··· → Agregar a otra playlist, y crea una tuya con esas canciones.";
   return out;
 }
 // Elige una canción que no haya sonado: ni en esta partida, ni en partidas anteriores (historial en el anfitrión),
@@ -687,7 +696,7 @@ async function hostCheck(){
         if (req.type === "start" || !st.started){ await hostStart(); st.started = true } else await hostNext();
         await hostClip(prev);
       }
-      st.heard = true; st.msg = null;
+      st.heard = true; st.msg = plWarn ? { t: plWarn } : null;
     }
     if (req.type === "buy") { st.msg = null; if (st.players[st.cur].tk >= 3) await hostBuy() }
     if (req.type === "check") { st.msg = null;
@@ -993,7 +1002,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v14";
+const VERSION = "17-oct v15";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta

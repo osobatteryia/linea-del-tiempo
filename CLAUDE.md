@@ -26,6 +26,7 @@ Juego musical estilo **Hitster** para jugar en grupo, cada uno desde su celular.
 - **Spotify solo en el anfitrión:** OAuth PKCE en el navegador. Client ID `f5875de832bf474398389d12b283967d` (app "Línea del Tiempo" en developer.spotify.com, cuenta de Oso, Premium). Redirect URI registrada: `https://osobatteryia.github.io/linea-del-tiempo/` (exacta, sin `index.html`; por eso existe `SP_REDIRECT`). Scopes incluyen `playlist-read-private` (versión de token `SCOPE_V = 2`; si el token es viejo se pide "Reconectar Spotify"). Al conectar desde `prueba.html` vuelve a esa página (`returnTo`).
 - **Pedidos al anfitrión:** los demás celulares escriben `st.req = {type, id}` (`play`, `check`, `reveal`, `buy`); el anfitrión los ejecuta en `hostCheck()` y limpia `st.req`. Si el anfitrión no responde en ~9 s, se muestra aviso con "Cancelar y volver a intentar".
 - Playlist por defecto: `https://open.spotify.com/playlist/4BX1DjvzqAT3GePXKGzyTn` ("Línea del Tiempo Musical: Adivina el Año", privada, de Oso). Al crear la partida se pueden pegar **varias playlists** (una por línea, `playlistUris`); se mezclan sin duplicados (hasta 1000 canciones por playlist).
+- **Lectura de playlists (cambio de Spotify, feb 2026):** se usa `GET /playlists/{id}/items` (respuesta `items[].item`); `/tracks` quedó eliminado y, al fallar, el juego caía al método antiguo (shuffle de Spotify) y las canciones se repetían. Spotify **solo entrega canciones de playlists propias o colaborativas**; si no puede leer ninguna, se avisa (`plWarn`).
 - **Sin repetir:** `pickFresh` evita canciones ya sonadas en la partida (`st.played`, `st.used`), las que ya son carta de alguien, y las sonadas en partidas anteriores (historial `heardHist` en el anfitrión, `markHeard`). Si ya sonaron todas, elige entre el 25 % más antiguo.
 - Lista interna `S` de 150 canciones con año (latinas/chilenas + internacionales), usada para corregir años y como respaldo del canje.
 
@@ -109,7 +110,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (1/5)
+### Pendientes de consolidar (2/5)
+- Playlists: se lee con `/playlists/{id}/items` (nuevo de Spotify); antes fallaba y caía al shuffle de Spotify (repeticiones). Aviso si la playlist no es propia.
 - Sin votación si la canción o el artista escritos son muy distintos a la respuesta (`near`, `farOff`).
 
 ### Historial
