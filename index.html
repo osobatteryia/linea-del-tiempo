@@ -123,6 +123,7 @@ details ol{margin:10px 0 0;padding-left:20px;display:flex;flex-direction:column;
 html.p2{--cyan:#52d4ff;--bad:#ff3fa4;--accent2:#e252ff;--gold2:#9aff52}
 html.p2 .switch.on{background:#3dffb0}html.p2 .switchrow.on{border-color:#3dffb0}
 textarea{box-sizing:border-box;display:block;max-width:100%;resize:vertical;line-height:1.4}
+.steals button.taken{opacity:.45;cursor:not-allowed}
 .switchrow{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;margin:0;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font:inherit;font-weight:600;text-align:left;cursor:pointer}
 .switch{flex:none;width:51px;height:31px;border-radius:999px;background:#3a3a44;position:relative;transition:background .2s}
 .switch span{position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px #0006;transition:left .2s}
@@ -345,6 +346,11 @@ let conn = "off";         // off | connecting | on | error
 let client = null, topic = null, handledReq = null, hostBusy = false;
 
 function setMe(v){ me = v; ls.set("me:" + room, v) }
+// Cada celular tiene un id propio: así un nombre elegido queda bloqueado para los demás
+const DEV = ls.get("devId") || (() => { const d = Math.random().toString(36).slice(2, 10); ls.set("devId", d); return d })();
+const claimOf = i => (st && st.claimed || {})[i];
+function releaseMine(){ if (!st || !st.claimed) return; for (const k of Object.keys(st.claimed)) if (st.claimed[k] === DEV) delete st.claimed[k] }
+function claim(i){ releaseMine(); st.claimed = Object.assign({}, st.claimed || {}, { [i]: DEV }) }
 const allHere = () => me === "todos";
 const spot = () => st && st.src === "spotify";
 
@@ -372,6 +378,12 @@ function connectRoom(brokerIdx = 0){
       if (applyVote(me, myVote.val)) setTimeout(commit, 300 + Math.random() * 400);
     }
     if (st && typeof me === "number" && me >= st.players.length) setMe(null);
+    // Mi nombre: si otro celular lo tomó, vuelvo a elegir; si nadie lo tiene marcado (partida nueva), lo marco de nuevo
+    if (st && typeof me === "number" && st.players[me]){
+      const c = claimOf(me);
+      if (c && c !== DEV) setMe(null);
+      else if (!c){ claim(me); setTimeout(commit, 200 + Math.random() * 600) }
+    }
     const typing = document.activeElement && document.activeElement.tagName === "INPUT";
     if (!typing) render();
     hostCheck();
@@ -1053,7 +1065,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v22";
+const VERSION = "17-oct v23";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
@@ -1123,7 +1135,7 @@ function render(){
   if (me == null && SOY != null && st.players[+SOY]) setMe(+SOY);
   if (me == null && st.phase !== "win"){
     app.innerHTML = `${statusHTML()}<header class="hero"><h1>¿Quién eres?</h1><p class="muted">Elige tu nombre para ver tu línea de tiempo en este celular.</p></header>
-      <div class="steals">${st.players.map((p,i)=>`<button class="ghost" data-act="iam" data-i="${i}">Soy ${esc(p.name)}</button>`).join("")}</div>
+      <div class="steals">${st.players.map((p,i)=>{const c=claimOf(i);const taken=c&&c!==DEV;return `<button class="ghost${taken?" taken":""}" data-act="iam" data-i="${i}" ${taken?"disabled":""}>${taken?`🔒 ${esc(p.name)} · ya está jugando`:`Soy ${esc(p.name)}`}</button>`}).join("")}</div>
       <button class="gold" data-act="iam" data-i="todos">Este celular es para todos</button>`;
     return;
   }
@@ -1150,6 +1162,7 @@ function render(){
       <p class="muted">${meName?`En este celular juega ${esc(meName)}.`:"Este celular es para todos."}${isHost?" Es el celular anfitrión.":""}</p>
       <button class="primary" data-act="back">Seguir jugando</button>
       <button class="ghost" data-act="iamReset">Cambiar quién soy</button>
+      ${isHost?`<button class="ghost" data-act="freeNames">Liberar nombres bloqueados</button>`:""}
       ${isHost?`<button class="ghost" data-act="invite">Mostrar QR para invitar</button>`:""}
       ${spot()?`<button class="ghost" data-act="otra">Otra canción en Spotify</button>`:""}
       <button class="ghost" data-act="end">Terminar y ver resultados</button>
@@ -1371,8 +1384,12 @@ document.addEventListener("click", e => {
     case "add": setup.names.push(""); ls.set("setup", setup); render(); return;
     case "rm": setup.names.splice(i, 1); ls.set("setup", setup); render(); return;
     case "start": if (setup.src === "spotify" && (!clientId() || !tok())){ document.querySelector('[data-act="spLogin"],#cid')?.scrollIntoView({ block:"center" }); return } startGame(); keepAwake(); break;
-    case "iam": setMe(el.dataset.i === "todos" ? "todos" : i); render(); return;
-    case "iamReset": setMe(null); menuOpen = false; render(); return;
+    case "iam": {
+      if (el.dataset.i === "todos"){ releaseMine(); setMe("todos"); commit(); render(); return }
+      if (!st.players[i] || (claimOf(i) && claimOf(i) !== DEV)) return;
+      claim(i); setMe(i); commit(); render(); return }
+    case "iamReset": releaseMine(); setMe(null); menuOpen = false; commit(); render(); return;
+    case "freeNames": if (!isHost) return; st.claimed = {}; if (typeof me === "number") st.claimed[me] = DEV; break;
     case "menu": menuOpen = true; showInvite = false; render(); window.scrollTo({ top:0 }); return;
     case "back": menuOpen = false; render(); return;
     case "slot":

@@ -23,6 +23,7 @@ Juego musical estilo **Hitster** para jugar en grupo, cada uno desde su celular.
 ## Arquitectura
 - **Sincronización:** MQTT público por WebSocket (`wss://broker.emqx.io:8084/mqtt`, respaldo `broker.hivemq.com`). Tópico `lineadeltiempo-oso-v1/salas/<SALA>/estado`, mensaje **retenido** con todo el estado `st` + `seq` (marca de tiempo). Cada celular publica el estado completo al cambiar algo (`commit()`); se ignoran estados con `seq` menor. Último en escribir gana. Si no hay conexión, el cambio queda pendiente (`dirty`) y se envía al reconectar. El estado también se guarda en `localStorage` (`st:<sala>`).
 - **Sin cuentas:** los amigos entran con QR o `?sala=CODIGO`. El que crea la sala es el **anfitrión** (`host:<sala>` en localStorage).
+- **Nombres bloqueados:** cada celular tiene un id (`DEV`, `devId` en localStorage). Al elegir "Soy X" se guarda `st.claimed[i] = DEV` (`claim`, `releaseMine`, `claimOf`); los demás ven "🔒 X · ya está jugando" deshabilitado. "Cambiar quién soy" libera el nombre. Si dos eligen a la vez, el que pierde vuelve a la lista. El anfitrión tiene "Liberar nombres bloqueados" en el Menú (por si alguien se fue sin liberar).
 - **Spotify solo en el anfitrión:** OAuth PKCE en el navegador. Client ID `f5875de832bf474398389d12b283967d` (app "Línea del Tiempo" en developer.spotify.com, cuenta de Oso, Premium). Redirect URI registrada: `https://osobatteryia.github.io/linea-del-tiempo/` (exacta, sin `index.html`; por eso existe `SP_REDIRECT`). Scopes incluyen `playlist-read-private` (versión de token `SCOPE_V = 2`; si el token es viejo se pide "Reconectar Spotify"). Al conectar desde `prueba.html` vuelve a esa página (`returnTo`).
 - **Pedidos al anfitrión:** los demás celulares escriben `st.req = {type, id}` (`play`, `check`, `reveal`, `buy`); el anfitrión los ejecuta en `hostCheck()` y limpia `st.req`. Si el anfitrión no responde en ~9 s, se muestra aviso con "Cancelar y volver a intentar".
 - Playlist por defecto: `https://open.spotify.com/playlist/4BX1DjvzqAT3GePXKGzyTn` ("Línea del Tiempo Musical: Adivina el Año", privada, de Oso). Al crear la partida se pueden pegar **varias playlists** (una por línea, `playlistUris`); se mezclan sin duplicados (hasta 1000 canciones por playlist).
@@ -97,7 +98,7 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 - **Paleta nueva (en prueba, activa por defecto):** solo rosa `#ff3fa4`, morado `#e252ff`, celeste `#52d4ff`, turquesa `#52ffd4`, menta `#3dffb0`, lima `#c6ff3d` y verde lima `#9aff52`. Clase `html.p2` (`applyPalette`, `palette()`, guardada en `localStorage["ldt-paleta"]`, compartida entre los 4 celulares de prueba.html). Décadas `DEC_NEW`: 50s y 60s lima, 70s menta, 80s rosa, 90s morado, 2000s celeste, 2010s turquesa, 2020s verde lima. Error (`--bad`) pasa a rosa. En el Menú: botón "Colores: nuevos/originales" para comparar.
 
 ## Limitaciones conocidas
-- iPhone: Spotify ignora el punto de inicio al cargar canción nueva (se mitigó con carga en pausa; Oso aún debe confirmar si desapareció el "comienzo"). No permite volumen remoto. En pausa + segundo plano se desconecta.
+- iPhone: Spotify ignora el punto de inicio al cargar canción nueva y no hay forma de cargarla sin que suene: queda un instante del comienzo (Oso lo confirmó). Bluetooth no lo arregla; un parlante/equipo con **Spotify Connect** sí. Se propuso tapar el instante con un efecto de sonido en el celular del jugador de turno (sin respuesta). No permite volumen remoto. En pausa + segundo plano se desconecta.
 - El anfitrión debe tener la página del juego abierta y la pantalla encendida; si sale de Safari, los pedidos esperan hasta que vuelva.
 - Probar con 2 pestañas en un iPhone no sirve (Safari congela la de fondo): usar `prueba.html`.
 - MQTT público: sin seguridad; cualquiera con el código de sala puede entrar.
@@ -109,16 +110,11 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 - Siempre `node --check` del script antes de publicar.
 
 ## Pendientes / ideas abiertas
-- Confirmar con Oso si la carga en pausa eliminó el "comienzo" de la canción en iPhone.
 - Propuesto, sin respuesta: bloquear "Siguiente turno" mientras haya votación de ficha abierta.
 
 ## Registro de cambios
 
-### Pendientes de consolidar (4/5)
-- Recuadro de playlists (textarea) alineado con los demás campos (`box-sizing:border-box`).
-- Inicio al azar sin "comienzo": pausa inmediata tras cargar la canción (cola o directo) y luego seek + play; `queueBad` solo si suena una canción distinta a la anterior 3 veces.
-- Pantalla final: cada jugador toca un nombre del ranking para ver su línea o la de otros (`winView`, `case "winView"`, solo en ese celular; por defecto la ganadora).
-- Aleatorio: solo se reproduce la canción elegida (sin lista extra), detección de cola de Spotify con restos (`queueBad`), aviso si la playlist no se puede leer, diagnóstico en el Menú del anfitrión.
+### Pendientes de consolidar (0/5)
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.
@@ -130,3 +126,4 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 - Votación y ficha automática solo si acertó el año, robo sin cancelar con 10 s para ubicar, canciones sin repetir (historial entre partidas) y varias playlists, cada celular ve solo su línea con botones para ver las de los demás.
 - Quitado aviso "Año según el álbum…", aviso grande de carta ganada al revisar, canción exige al menos la mitad del nombre, votación con voto fijo y resultado cuando gana el no, votación con llave de sol / llave de fa.
 - Sin votación si la respuesta no se parece, playlists con `/items` (arreglo de repeticiones), interruptor "Pedir votación al grupo" + nombres limpios, interruptor alineado, paleta nueva de prueba con botón en el Menú.
+- Aleatorio sin fugas (`queueBad`, diagnóstico), pantalla final con línea de cada jugador (`winView`), pausa inmediata al cargar canción (iPhone sigue con un instante del comienzo; solución real: Spotify Connect), recuadro de playlists alineado, nombres bloqueados al elegir "¿Quién eres?".
