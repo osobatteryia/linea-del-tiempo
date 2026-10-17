@@ -66,7 +66,7 @@ Para encontrar algo rápido sin leer todo el archivo: busca el nombre con `grep 
 | Botón Siguiente turno (solo jugador de turno) | `NEXT_FALLBACK`, `nextOwner`, `nextBtnHTML` |
 | Votación de ficha | `voteInfo`, `voteHTML`, `applyVote`, `myVote` |
 | Ver la línea de otro jugador | `viewerHTML`, `viewTl`, `case "viewTl"`; en la pantalla final: `winView` |
-| Marcador, barra de sala, avisos, panel de Spotify, QR | `scoreHTML`, `statusHTML`, `msgHTML`, `hostPanel`, `linkHTML`, `drawQR` |
+| Marcador, barra de sala, avisos, panel de Spotify, QR | `scoreHTML`, `statusHTML`, `msgHTML`, `hostPanel`, `linkHTML`, `drawQR` (usa `qrcode()` incluido en el primer `<script>`) |
 | Pantallas | `render()`: portada (`if (!room)`), crear partida (`if (!st)`), menú (`menuOpen`), fases `turn`, `check`, `steal`, `needyear`, `reveal`, `win`. Línea propia de cada jugador: `myTl` |
 | Cuenta regresiva y entrega automática al acabarse el tiempo | `timeLeft` + `setInterval` en `// ===== Cuenta regresiva =====` |
 | Botones (todas las acciones) | `document.addEventListener("click"` → `switch (act)` con `case "play"`, `"slot"`, `"confirm"`, `"skip"`, `"buy"`, `"pickStealer"`, `"reveal"`, `"vote"`, `"next"`, etc. |
@@ -107,14 +107,15 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 - Subir `VERSION` en `index.html` en cada cambio publicado (también lo usa `checkUpdate` para avisar a los celulares que hay versión nueva) (se ve abajo en la pantalla; sirve para saber si Safari tiene la última).
 - Servidor local con broker MQTT propio (aedes + ws) y Playwright/Chromium; reemplazar en una copia de `index.html` la URL de mqtt y `BROKERS` por `ws://localhost:8888`, y simular Spotify con `context.route("https://api.spotify.com/**", ...)`.
 - En Playwright sync, usar `page.wait_for_timeout()` (no `time.sleep`) para que respondan las rutas simuladas.
-- Siempre `node --check` del script antes de publicar.
+- Siempre `node --check` del script antes de publicar (el script principal es el que empieza con `<script>` solo en su línea; el primero es la librería del QR).
 
 ## Pendientes / ideas abiertas
 - Propuesto, sin respuesta: bloquear "Siguiente turno" mientras haya votación de ficha abierta.
 
 ## Registro de cambios
 
-### Pendientes de consolidar (2/5)
+### Pendientes de consolidar (3/5)
+- QR: librería `qrcode-generator` (MIT) incluida dentro de `index.html` (antes `qrcodejs` desde cdnjs, que fallaba); `drawQR` dibuja SVG. En el Menú, el QR aparece arriba y el botón cambia a "Ocultar QR".
 - Quitado el aviso "Spotify no deja cambiar el volumen de este aparato…".
 - Aviso "Hay una versión nueva del juego" (`checkUpdate`: cada 60 s y al volver a la pestaña compara `VERSION` publicado con el cargado; botón Actualizar recarga con `?v=<hora>`).
 
