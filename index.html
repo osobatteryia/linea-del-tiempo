@@ -114,6 +114,8 @@ details ol{margin:10px 0 0;padding-left:20px;display:flex;flex-direction:column;
 .mystery.steal{background:repeating-linear-gradient(135deg,var(--gold) 0 12px,#a8e021 12px 24px);color:var(--ink)}
 .ghostcard{outline:3px dashed var(--ok);outline-offset:2px;opacity:.95}
 .wrongslot{border:2px dashed var(--bad);color:var(--bad);border-radius:12px;padding:8px 12px;font-weight:700;text-align:center}
+.votes button{flex:1 1 120px}
+.votecount{font-size:.85rem}
 .mini{min-height:0;padding:4px 10px;font-size:.8rem}
 .pulse{animation:pulse 1.4s ease-in-out infinite}
 @keyframes pulse{50%{opacity:.45}}
@@ -317,6 +319,9 @@ function connectRoom(brokerIdx = 0){
     if (!(d.seq > curSeq)) { hostCheck(); return }   // mi propio eco o un estado más antiguo
     curSeq = d.seq; dirty = false;
     st = d.st || null; saveLocal();
+    if (myVote && st && st.phase === "reveal" && st.round + ":" + st.cur === myVote.key && typeof me === "number" && !st.voteWon && (st.votes || {})[me] !== myVote.val){
+      if (applyVote(me, myVote.val)) setTimeout(commit, 300 + Math.random() * 400);
+    }
     if (st && typeof me === "number" && me >= st.players.length) setMe(null);
     const typing = document.activeElement && document.activeElement.tagName === "INPUT";
     if (!typing) render();
@@ -697,7 +702,7 @@ function nextTurn(){
   const win = st.players.find(p => p.tl.length >= st.target);
   if (win || (!spot() && !st.deck.length)){ st.phase = "win"; return }
   st.cur = (st.cur + 1) % st.players.length; if (st.cur === 0) st.round++;
-  Object.assign(st, { phase:"turn", song: spot() ? null : card(st.deck.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false, pending:null, guess:null, guessRes:null, autoBonus:false, clipAt:null, timeUp:false, note:null });
+  Object.assign(st, { phase:"turn", song: spot() ? null : card(st.deck.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false, pending:null, guess:null, guessRes:null, autoBonus:false, clipAt:null, timeUp:false, note:null, votes:null, voteWon:false });
 }
 function reveal(){
   const p = st.players[st.cur], y = yr(st.song);
@@ -736,6 +741,43 @@ function tlHTML(tl,{pick=false,sel=null,sel2=null,highlight=null}={}){
   }
   return h+"</div>";
 }
+// ===== Votación de ficha =====
+// Si el jugador completó canción y artista pero el juego no le dio la ficha, los demás votan.
+// Se entrega cuando vota "sí" la mayoría de los demás jugadores (empate o no votar = no).
+function voteInfo(){
+  const p = st.players[st.cur];
+  const voters = st.players.length - 1;
+  const need = Math.floor(voters / 2) + 1;
+  const votes = st.votes || {};
+  const yes = Object.entries(votes).filter(([k, v]) => v === true && +k !== st.cur).length;
+  const eligible = !!(st.guess && st.guess.t && st.guess.a) && !st.autoBonus && !(st.res && st.res.stolen) && (p.tk < 5 || st.voteWon);
+  return { voters, need, yes, votes, eligible };
+}
+function voteHTML(p){
+  if (st.autoBonus) return `<p class="verdict ok" style="font-size:1.1rem">¡Adivinó las dos! +1 ficha</p>`;
+  if (st.res && st.res.stolen) return `<p class="muted">Como ${esc(st.players[st.stealer].name)} le robó la carta, no hay votación de ficha.</p>`;
+  if (!(st.guess && st.guess.t && st.guess.a)) return `<p class="muted">Para votar la ficha, ${esc(p.name)} tenía que completar canción y artista.</p>`;
+  const v = voteInfo();
+  if (st.voteWon) return `<p class="verdict ok" style="font-size:1.1rem">¡El grupo le dio la ficha! +1</p>`;
+  if (p.tk >= 5) return `<p class="muted">${esc(p.name)} ya tiene 5 fichas, el máximo.</p>`;
+  const count = `<p class="muted votecount">${v.yes} de ${v.voters} votaron sí · se necesitan ${v.need}</p>`;
+  if (allHere()) return `<p>¿Estaba bien? Voten a mano alzada.</p><button class="gold" data-act="voteAll">El grupo decidió darle la ficha</button>`;
+  if (me === st.cur) return `<p>El grupo está votando si te dan la ficha.</p>${count}`;
+  const mine = v.votes[me];
+  return `<p>¿Le dan la ficha a ${esc(p.name)}? Comparen lo que escribió con la respuesta.</p>
+    <div class="row votes"><button class="${mine===true?"gold":"ghost"}" data-act="vote" data-v="1">👍 Dar ficha</button><button class="${mine===false?"primary":"ghost"}" data-act="vote" data-v="0">👎 No</button></div>${count}`;
+}
+function applyVote(i, val){
+  if (!st || st.phase !== "reveal" || st.voteWon || i === st.cur) return false;
+  const v = voteInfo(); if (!v.eligible) return false;
+  st.votes = Object.assign({}, st.votes || {}, { [i]: val });
+  const n = voteInfo();
+  if (n.yes >= n.need){ st.voteWon = true; st.bonus = true; const p = st.players[st.cur]; p.tk = Math.min(5, p.tk + 1) }
+  return true;
+}
+// Si dos votan al mismo tiempo, un voto puede pisarse: se reenvía el propio si se perdió
+let myVote = null;
+
 // Muestra dónde iba la carta en la línea del jugador que falló, junto a lo que eligió
 function missHTML(tl, song, wrong){
   const y = yr(song);
@@ -986,9 +1028,7 @@ function render(){
         <div class="${st.guessRes&&st.guessRes.t?"hit":"miss"}"><span>${st.guessRes&&st.guessRes.t?"✓":"✗"}</span> Canción: ${st.guess.t?`«${esc(st.guess.t)}»`:"<i>no escribió</i>"}</div>
         <div class="${st.guessRes&&st.guessRes.a?"hit":"miss"}"><span>${st.guessRes&&st.guessRes.a?"✓":"✗"}</span> Artista: ${st.guess.a?`«${esc(st.guess.a)}»`:"<i>no escribió</i>"}</div></div>`
         :`<p class="muted">${esc(p.name)} no escribió canción ni artista.</p>`}
-      ${st.autoBonus?`<p class="verdict ok" style="font-size:1.1rem">¡Adivinó las dos! +1 ficha</p>`
-        :st.res&&st.res.stolen?`<p class="muted">Como ${esc(st.players[st.stealer].name)} le robó la carta, no se puede dar la ficha a mano.</p>`
-        :`<button class="gold" data-act="bonus" ${st.bonus||p.tk>=5?"disabled":""}>${st.bonus?"Ficha entregada":p.tk>=5?"Ya tiene 5 fichas":"Dar ficha igual (si estaba bien)"}</button>`}
+      ${voteHTML(p)}
     </section>
     ${!r.ok?`<section style="display:flex;flex-direction:column;gap:10px"><span class="label">Dónde iba en la línea de ${esc(p.name)}</span>${missHTML(p.tl, st.song, st.slot)}</section>`:""}
     ${owner?`<section style="display:flex;flex-direction:column;gap:10px"><span class="label">Línea de ${esc(owner.name)}</span>${tlHTML(owner.tl,{highlight:st.song})}</section>`:""}
@@ -1080,7 +1120,9 @@ document.addEventListener("click", e => {
     case "setYear": { const y = parseInt(yearDraft, 10); if (!(y >= 1900 && y <= 2100)){ document.getElementById("yearIn")?.focus(); return }
       const [t,a] = st.pending; st.pending = null; st.song = [t, a, y, "manual"]; reveal(); break }
     case "fixYear": yearDraft = String(st.song[2]); st.pending = [st.song[0], st.song[1]]; undoReveal(); st.phase = "needyear"; break;
-    case "bonus": if (st.res && st.res.stolen) return; if (!st.bonus){ st.players[st.cur].tk = Math.min(5, st.players[st.cur].tk + 1); st.bonus = true } break;
+    case "vote": { if (typeof me !== "number") return; const val = el.dataset.v === "1";
+      if (!applyVote(me, val)) return; myVote = { key: st.round + ":" + st.cur, val }; break }
+    case "voteAll": { if (!allHere() || st.voteWon || !voteInfo().eligible) return; st.voteWon = true; st.bonus = true; const p = st.players[st.cur]; p.tk = Math.min(5, p.tk + 1); break }
     case "next": if (st.phase === "reveal") nextTurn(); break;
     case "end": st.phase = "win"; menuOpen = false; break;
     case "again": if (!confirmReset){ confirmReset = true; render(); return } confirmReset = false; st = null; menuOpen = false; break;
