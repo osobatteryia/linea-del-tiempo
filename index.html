@@ -892,8 +892,11 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
+const VERSION = "17-oct v2";
 function render(){
   const app = $app();
+  // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
+  if (st && st.phase === "steal" && !st.checked && st.robando == null && st.stealer == null){ st.phase = "check"; st.checkAt = Date.now() }
   // Portada: crear o unirse
   if (!room){
     app.innerHTML = `<header class="hero"><span class="label">Juego musical para la casa</span><h1>Línea del Tiempo Musical</h1>
@@ -978,7 +981,7 @@ function render(){
   // Línea propia, para los que no están jugando el turno (cada uno ve sus cartas)
   const myTl = typeof me === "number" && me !== st.cur && st.players[me] && !(st.phase === "reveal" && st.res && st.res.owner === me)
     ? `<section class="mine" style="display:flex;flex-direction:column;gap:10px"><span class="label">Tu línea de tiempo · ${st.players[me].tl.length} ${st.players[me].tl.length === 1 ? "carta" : "cartas"}</span>${tlHTML(st.players[me].tl)}</section>` : "";
-  const foot = myTl + `<div class="foot"><span class="label" style="align-self:center">Ronda ${st.round}${spot()?"":` · quedan ${st.deck.length} canciones`}</span><button class="ghost" data-act="menu">Menú</button></div>`;
+  const foot = myTl + `<div class="foot"><span class="label" style="align-self:center">Ronda ${st.round}${spot()?"":` · quedan ${st.deck.length} canciones`} · v ${VERSION}</span><button class="ghost" data-act="menu">Menú</button></div>`;
   const head = `${statusHTML()}${hostPanel()}${scoreHTML()}`;
 
   if (menuOpen){

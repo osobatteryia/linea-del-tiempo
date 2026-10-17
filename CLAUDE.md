@@ -107,10 +107,11 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (3/5)
+### Pendientes de consolidar (4/5)
 - Marcador: las fichas de todos los jugadores se ven (las etiquetas pasan a una segunda fila en vez de quedar ocultas a la derecha).
 - Cada jugador ve **su propia línea de tiempo** abajo cuando no es su turno (antes todos veían solo la del jugador de turno y parecía que la primera carta era igual para todos; las cartas iniciales siempre fueron distintas).
 - Nuevo paso **Revisar respuesta** (✓/✗ solo del año), robo solo si falló con 5 s y en la línea propia del que roba, posición del jugador de turno oculta para los demás, revelar recién después del robo.
+- Versión visible abajo en la pantalla (`VERSION`, ej. "v 17-oct v2") para saber si Safari tiene la última; `prueba.html` agrega `&v=<hora>` a los iframes para no usar copias guardadas; partidas que quedaron en fase `steal` sin revisar pasan a `check` al abrirse.
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.
