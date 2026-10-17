@@ -104,7 +104,7 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 - MQTT público: sin seguridad; cualquiera con el código de sala puede entrar.
 
 ## Cómo probar cambios (en el contenedor)
-- Subir `VERSION` en `index.html` en cada cambio publicado (se ve abajo en la pantalla; sirve para saber si Safari tiene la última).
+- Subir `VERSION` en `index.html` en cada cambio publicado (también lo usa `checkUpdate` para avisar a los celulares que hay versión nueva) (se ve abajo en la pantalla; sirve para saber si Safari tiene la última).
 - Servidor local con broker MQTT propio (aedes + ws) y Playwright/Chromium; reemplazar en una copia de `index.html` la URL de mqtt y `BROKERS` por `ws://localhost:8888`, y simular Spotify con `context.route("https://api.spotify.com/**", ...)`.
 - En Playwright sync, usar `page.wait_for_timeout()` (no `time.sleep`) para que respondan las rutas simuladas.
 - Siempre `node --check` del script antes de publicar.
@@ -114,7 +114,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (0/5)
+### Pendientes de consolidar (1/5)
+- Aviso "Hay una versión nueva del juego" (`checkUpdate`: cada 60 s y al volver a la pestaña compara `VERSION` publicado con el cargado; botón Actualizar recarga con `?v=<hora>`).
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.

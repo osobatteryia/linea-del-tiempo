@@ -124,6 +124,8 @@ html.p2{--cyan:#52d4ff;--bad:#ff3fa4;--accent2:#e252ff;--gold2:#9aff52}
 html.p2 .switch.on{background:#3dffb0}html.p2 .switchrow.on{border-color:#3dffb0}
 textarea{box-sizing:border-box;display:block;max-width:100%;resize:vertical;line-height:1.4}
 .steals button.taken{opacity:.45;cursor:not-allowed}
+#upd{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:50;display:flex;align-items:center;gap:10px;justify-content:space-between;background:var(--surface);border:1.5px solid var(--accent);border-radius:16px;padding:10px 12px;box-shadow:0 8px 30px #000a;font-size:.9rem}
+#upd button{flex:none;width:auto;min-height:0;padding:10px 14px}
 .switchrow{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;margin:0;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font:inherit;font-weight:600;text-align:left;cursor:pointer}
 .switch{flex:none;width:51px;height:31px;border-radius:999px;background:#3a3a44;position:relative;transition:background .2s}
 .switch span{position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px #0006;transition:left .2s}
@@ -1065,7 +1067,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v23";
+const VERSION = "17-oct v24";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
@@ -1456,6 +1458,23 @@ document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id
 
 // Para la página de pruebas
 window.__ldt = { room: () => room, host: () => isHost, phase: () => st && st.phase, cur: () => st ? st.cur : null, conn: () => conn };
+
+// ===== Aviso de versión nueva =====
+// Safari guarda copias de la página; cada minuto (y al volver a la pestaña) se revisa si hay una versión publicada más nueva
+async function checkUpdate(){
+  try {
+    const r = await fetch(location.pathname + "?nc=" + Date.now(), { cache: "no-store" });
+    const m = (await r.text()).match(/const VERSION = "([^"]+)"/);
+    if (m && m[1] !== VERSION && !document.getElementById("upd")){
+      const d = document.createElement("div"); d.id = "upd";
+      d.innerHTML = `<span>Hay una versión nueva del juego (v ${esc(m[1])}).</span><button class="primary" type="button">Actualizar</button>`;
+      d.querySelector("button").onclick = () => { const u = new URL(location.href); u.searchParams.set("v", Date.now()); location.replace(u.toString()) };
+      document.body.appendChild(d);
+    }
+  } catch (e) {}
+}
+setTimeout(checkUpdate, 4000); setInterval(checkUpdate, 60000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkUpdate() });
 
 // ===== Inicio =====
 (async () => {
