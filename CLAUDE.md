@@ -84,7 +84,7 @@ Fases de `st.phase`: `turn` → `check` (botón Revisar respuesta) → `steal` (
 - **Siguiente turno:** solo el jugador que terminó su turno (respaldo: 60 s para todos).
 - **Canjear 3 fichas por una carta:** en su turno, antes de empezar; la carta entra directo a su línea; sigue jugando el turno.
 - Al fallar se muestra **dónde iba la carta** en su línea (✗ Aquí la puso / ✓ Aquí iba).
-- "Corregir año" si el año viene de un álbum de Spotify (reediciones).
+- Ya no se muestra el aviso "Año según el álbum en Spotify… Corregir año" al revelar (Oso pidió quitarlo). El código de `fixYear` sigue, pero sin botón.
 - Orden de turnos: el de la lista de nombres al crear la partida.
 - Opciones al crear: tiempo para responder (10/15/20/30/sin límite), parte de la canción (al azar / desde el comienzo), al terminar el tiempo (bajar volumen / seguir / pausar), cartas para ganar, fichas iniciales, playlist.
 
@@ -109,7 +109,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (0/5)
+### Pendientes de consolidar (1/5)
+- Quitado el aviso "Año según el álbum en Spotify… Corregir año" de la pantalla de revelar.
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.

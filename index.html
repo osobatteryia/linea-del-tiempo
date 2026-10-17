@@ -964,7 +964,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v8";
+const VERSION = "17-oct v9";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
@@ -1190,7 +1190,6 @@ ${foot}`;
     app.innerHTML = `${head}
     <div class="reveal" style="--c:${color(y)}"><span class="yr">${y}</span><span class="t">${esc(t)}</span><span>${esc(a)}</span></div>
     ${v}
-    ${from==="spotify"||from==="manual"?`<p class="muted" style="font-size:.85rem">${from==="spotify"?"Año según el álbum en Spotify. Si es una reedición o recopilación, corríjanlo.":"Año ingresado por los jugadores."} <button class="ghost mini" data-act="fixYear">Corregir año</button></p>`:""}
     <section class="panel"><span class="label">Canción y artista</span>
       ${st.guess&&(st.guess.t||st.guess.a)?`<div class="guess">
         <div class="${st.guessRes&&st.guessRes.t?"hit":"miss"}"><span>${st.guessRes&&st.guessRes.t?"✓":"✗"}</span> Canción: ${st.guess.t?`«${esc(st.guess.t)}»`:"<i>no escribió</i>"}</div>
