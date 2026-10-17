@@ -38,7 +38,7 @@ Juego musical estilo **Hitster** para jugar en grupo, cada uno desde su celular.
 
 ## Cómo suena cada turno (Spotify)
 1. El jugador de turno toca **▶ Empezar mi turno** (antes no puede elegir posición).
-2. El anfitrión elige una canción de la playlist no usada (`loadPlaylist`, `hostPlayTurn`). **Si Spotify está en un celular** (iPhone/Android), no pausa nada: cambia la canción en el aire y salta al punto (`loadNoPause`), porque en pausa + segundo plano Spotify se duerme. **En computador/parlante:** pausa la anterior, la **carga en pausa** (cola + siguiente + **pausa inmediata dos veces**, porque en iPhone "siguiente" da play solo), la mueve a un **punto al azar** y le da play (`loadPausedAt`). Si falla, usa `loadDirectAt` (play solo de esa canción + pausa inmediata + seek + play); último recurso el método antiguo. En iPhone puede quedar un "clic" muy corto del comienzo: Spotify iOS ignora `position_ms` y no deja bajar el volumen. Con parlante Spotify Connect/computador/Android no pasa.
+2. El anfitrión elige una canción de la playlist no usada (`loadPlaylist`, `hostPlayTurn`). **Si Spotify está en un celular** (iPhone/Android): método v18 (`playPhoneV18`), el que funcionaba en el iPhone de Oso; la lista de ~60 canciones mantiene a Spotify sonando entre turnos (si queda en silencio en segundo plano, el iPhone lo duerme). La canción que sonaba de fondo se marca como escuchada. **En computador/parlante:** pausa la anterior, la **carga en pausa** (cola + siguiente + **pausa inmediata dos veces**, porque en iPhone "siguiente" da play solo), la mueve a un **punto al azar** y le da play (`loadPausedAt`). Si falla, usa `loadDirectAt` (play solo de esa canción + pausa inmediata + seek + play); último recurso el método antiguo. En iPhone puede quedar un "clic" muy corto del comienzo: Spotify iOS ignora `position_ms` y no deja bajar el volumen. Con parlante Spotify Connect/computador/Android no pasa.
 3. Corre la cuenta regresiva (10 s por defecto) en todos los celulares. Al llegar a 0 se entrega lo que haya elegido el jugador.
 4. Al terminar el tiempo, el volumen baja a la mitad (`duck`) y vuelve en el próximo turno. **En iPhone Spotify no permite cambiar el volumen** → la música sigue sonando igual; ya **no se muestra aviso** (Oso pidió quitarlo). **No se pausa** por defecto: en iPhone, Spotify en pausa y en segundo plano se desconecta ("No encuentro ningún Spotify abierto").
 5. Al revelar, el anfitrión usa la canción que guardó al empezar (`clipTrack:<sala>`), no lo que diga Spotify.
@@ -56,7 +56,7 @@ Para encontrar algo rápido sin leer todo el archivo: busca el nombre con `grep 
 | Estado (`st`, `setup`, `me`, `isHost`, `room`) | `// ===== Estado =====` |
 | Conexión entre celulares (MQTT) | `connectRoom`, `commit`, `flush`, `saveLocal` |
 | Login Spotify | `spotifyLogin`, `spotifyCallback`, `accessToken`; llamadas a la API: `sp()` |
-| Elegir y poner la canción del turno | `loadPlaylist`, `pickFresh`, `markHeard`, `hostPlayTurn`, `loadQueueNoPause` (celulares, 1.º), `loadNoPause` (celulares, confirma que suene), `wakeDevice`, `loadPausedAt` (computador/parlante), `pickDevice`; método antiguo: `hostStart`, `hostNext`, `hostClip` |
+| Elegir y poner la canción del turno | `loadPlaylist`, `pickFresh`, `markHeard`, `hostPlayTurn`, `playPhoneV18` + `loadPausedAtV18` (celulares), `loadQueueNoPause`/`loadNoPause`/`wakeDevice` (sin uso), `loadPausedAt` (computador/parlante), `pickDevice`; método antiguo: `hostStart`, `hostNext`, `hostClip` |
 | Fin del fragmento (bajar volumen / pausar) | `afterClip`, `duck`, `unduck`, `pauseClip` |
 | Revisar respuesta (✓/✗ del año, sin mostrar la canción) | `doCheck`, `checkOwner`, `CHECK_FALLBACK`; con Spotify: `request("check")` → `resolveSong` en el anfitrión |
 | Revelar con Spotify | `hostReveal` = `resolveSong` + `reveal()` (usa `clipTrack:<sala>` guardado) |
@@ -100,7 +100,7 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 - **Paleta nueva (en prueba, activa por defecto):** solo rosa `#ff3fa4`, morado `#e252ff`, celeste `#52d4ff`, turquesa `#52ffd4`, menta `#3dffb0`, lima `#c6ff3d` y verde lima `#9aff52`. Clase `html.p2` (`applyPalette`, `palette()`, guardada en `localStorage["ldt-paleta"]`, compartida entre los 4 celulares de prueba.html). Décadas `DEC_NEW`: 50s y 60s lima, 70s menta, 80s rosa, 90s morado, 2000s celeste, 2010s turquesa, 2020s verde lima. Error (`--bad`) pasa a rosa. En el Menú: botón "Colores: nuevos/originales" para comparar.
 
 ## Limitaciones conocidas
-- iPhone: el anfitrión nunca pausa Spotify (se dormiría en segundo plano). Si Spotify no suena tras dar play, no parte la cuenta regresiva y sale aviso con `[equipo · estado · canción]`.
+- iPhone: Spotify en segundo plano se duerme si queda en silencio. Por eso en celulares se manda la canción + ~60 más (sigue sonando entre turnos). No mandar solo una canción ni agregar pausas largas.
 - iPhone: Spotify ignora el punto de inicio al cargar canción nueva y no hay forma de cargarla sin que suene: queda un instante del comienzo (Oso lo confirmó). Bluetooth no lo arregla; un parlante/equipo con **Spotify Connect** sí. Se propuso tapar el instante con un efecto de sonido en el celular del jugador de turno (sin respuesta). No permite volumen remoto. En pausa + segundo plano se desconecta.
 - El anfitrión debe tener la página del juego abierta y la pantalla encendida; si sale de Safari, los pedidos esperan hasta que vuelva.
 - Probar con 2 pestañas en un iPhone no sirve (Safari congela la de fondo): usar `prueba.html`.
@@ -117,8 +117,9 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (1/5)
+### Pendientes de consolidar (2/5)
 - iPhone: con v33 salió "[sin reproductor activo]": el play con `uris` apagaba Spotify en segundo plano. Ahora en celulares primero `loadQueueNoPause` (fila + siguiente, sin pausa, confirma que suene; si queda en pausa >3 veces o la cola tiene restos → `loadNoPause`). `spLog` guarda las últimas llamadas a Spotify (método, ruta corta, estado, ×repeticiones) y se agrega al aviso de error para diagnosticar desde la captura de Oso.
+- v34 tampoco sirvió (turno 2: fila+siguiente → pausa sin canción). Oso confirmó que **antes funcionaba en el mismo iPhone**: era el método v18 (pausa + `loadPausedAtV18` sin pausas extra; respaldo play con la canción + ~60 más de la playlist, así Spotify **nunca queda en silencio** entre turnos). Restaurado para celulares (`playPhoneV18`). Para no repetir lo que suena de fondo, al empezar cada turno se anota como escuchada la canción que sonaba (`prevUri` → `markHeard`). `loadQueueNoPause`, `loadNoPause`, `wakeDevice` quedan sin uso en celulares. Lección: en iPhone el problema real es dejar a Spotify en silencio; no mandar solo una canción.
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.

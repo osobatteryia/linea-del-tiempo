@@ -748,6 +748,45 @@ async function wakeDevice(dev){
   ls.set("spotifyDevice", found.id);
   return found.id;
 }
+// ===== Método v18 para celulares (el que funcionaba en el iPhone de Oso) =====
+// Se manda la canción elegida + ~60 más de la playlist: así, al terminar el fragmento, Spotify sigue sonando
+// y el iPhone no lo duerme. Lo que suene de fondo se anota como escuchado (ver hostPlayTurn) para no repetirlo.
+async function loadPausedAtV18(dev, t, pos){
+  try {
+    await sp("POST", "/me/player/queue?uri=" + encodeURIComponent(t.uri) + "&device_id=" + dev);
+    await wait(250);
+    await sp("POST", "/me/player/next?device_id=" + dev);
+    let ok = false;
+    for (let k = 0; k < 8; k++){
+      await wait(300);
+      const c = await sp("GET", "/me/player/currently-playing");
+      if (c && c.item && c.item.uri === t.uri){
+        if (c.is_playing) { try { await sp("PUT", "/me/player/pause?device_id=" + dev) } catch (e) {} }
+        ok = true; break;
+      }
+    }
+    if (!ok) return false;
+    await sp("PUT", "/me/player/seek?position_ms=" + pos + "&device_id=" + dev);
+    await wait(250);
+    await sp("PUT", "/me/player/play?device_id=" + dev);
+    return true;
+  } catch (e) { return false }
+}
+async function playPhoneV18(dev, t, pos, tracks){
+  try { await sp("PUT", "/me/player/pause?device_id=" + dev) } catch (e) {}
+  if (pos && await loadPausedAtV18(dev, t, pos)) return;
+  const rest = shuffle(tracks.filter(x => x.uri !== t.uri && !(st.played || []).includes(x.uri)).map(x => x.uri)).slice(0, 60);
+  await sp("PUT", "/me/player/play?device_id=" + dev, { uris: [t.uri, ...rest], position_ms: pos });
+  if (pos){
+    for (let k = 0; k < 4; k++){
+      await wait(400);
+      let c = null; try { c = await sp("GET", "/me/player/currently-playing") } catch (e) {}
+      if (!c || !c.item || c.item.uri !== t.uri) continue;
+      if (Math.abs((c.progress_ms || 0) - pos) > 2500){ try { await sp("PUT", "/me/player/seek?position_ms=" + pos + "&device_id=" + dev) } catch (e) {} }
+      break;
+    }
+  }
+}
 async function hostPlayTurn(){
   let tracks;
   try { tracks = await loadPlaylist() }
@@ -767,8 +806,9 @@ async function hostPlayTurn(){
   // Corta la canción anterior justo antes, para que no se mezcle con la nueva
   let prevUri = null; try { const c = await sp("GET", "/me/player/currently-playing"); prevUri = c && c.item && c.item.uri } catch (e) {}
   if (isPhoneDev()){
-    try { if (!(await loadQueueNoPause(dev, t, pos, prevUri))) await loadNoPause(dev, t, pos) }
-    catch (e) { if (e && e.code === 404){ const d2 = await wakeDevice(dev); await loadNoPause(d2, t, pos) } else throw e }
+    // La canción que sonaba de fondo (de la lista anterior) ya la escucharon todos: se anota para no repetirla
+    if (prevUri && prevUri !== t.uri && tracks.some(x => x.uri === prevUri)) markHeard(prevUri);
+    await playPhoneV18(dev, t, pos, tracks);
     ls.set("clipTrack:" + room, { uri: t.uri, name: t.name, artists: t.artists, date: t.date, turn: st.round + ":" + st.cur });
     st.started = true;
     st.clipAt = len ? Date.now() : null;
@@ -1257,7 +1297,7 @@ function render(){
   window.scrollTo(0, y);
 }
 
-const VERSION = "17-oct v34";
+const VERSION = "17-oct v35";
 function renderView(){
   const app = $app();
   checkGame();
