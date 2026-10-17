@@ -56,7 +56,7 @@ Para encontrar algo rápido sin leer todo el archivo: busca el nombre con `grep 
 | Estado (`st`, `setup`, `me`, `isHost`, `room`) | `// ===== Estado =====` |
 | Conexión entre celulares (MQTT) | `connectRoom`, `commit`, `flush`, `saveLocal` |
 | Login Spotify | `spotifyLogin`, `spotifyCallback`, `accessToken`; llamadas a la API: `sp()` |
-| Elegir y poner la canción del turno | `loadPlaylist`, `pickFresh`, `markHeard`, `hostPlayTurn`, `loadPausedAt`, `pickDevice`; método antiguo: `hostStart`, `hostNext`, `hostClip` |
+| Elegir y poner la canción del turno | `loadPlaylist`, `pickFresh`, `markHeard`, `hostPlayTurn`, `loadNoPause` (celulares, confirma que suene), `wakeDevice`, `loadPausedAt` (computador/parlante), `pickDevice`; método antiguo: `hostStart`, `hostNext`, `hostClip` |
 | Fin del fragmento (bajar volumen / pausar) | `afterClip`, `duck`, `unduck`, `pauseClip` |
 | Revisar respuesta (✓/✗ del año, sin mostrar la canción) | `doCheck`, `checkOwner`, `CHECK_FALLBACK`; con Spotify: `request("check")` → `resolveSong` en el anfitrión |
 | Revelar con Spotify | `hostReveal` = `resolveSong` + `reveal()` (usa `clipTrack:<sala>` guardado) |
@@ -69,7 +69,7 @@ Para encontrar algo rápido sin leer todo el archivo: busca el nombre con `grep 
 | Votación de ficha | `voteInfo`, `voteHTML`, `applyVote`, `myVote` |
 | Ver la línea de otro jugador | `viewerHTML`, `viewTl`, `case "viewTl"`; en la pantalla final: `winView` |
 | Marcador, barra de sala, avisos, panel de Spotify, QR | `scoreHTML`, `statusHTML`, `msgHTML`, `hostPanel`, `linkHTML`, `drawQR` (usa `qrcode()` incluido en el primer `<script>`) |
-| Pantallas | `render()`: portada (`if (!room)`), crear partida (`if (!st)`), menú (`menuOpen`), fases `turn`, `check`, `steal`, `needyear`, `reveal`, `win`. Línea propia de cada jugador: `myTl` |
+| Pantallas | `render()` (envoltorio que conserva el campo activo) → `renderView()`: portada (`if (!room)`), crear partida (`if (!st)`), menú (`menuOpen`), fases `turn`, `check`, `steal`, `needyear`, `reveal`, `win`. Línea propia de cada jugador: `myTl` |
 | Cuenta regresiva y entrega automática al acabarse el tiempo | `timeLeft` + `setInterval` en `// ===== Cuenta regresiva =====` |
 | Botones (todas las acciones) | `document.addEventListener("click"` → `switch (act)` con `case "play"`, `"slot"`, `"confirm"`, `"skip"`, `"buy"`, `"pickStealer"`, `"reveal"`, `"vote"`, `"next"`, etc. |
 | Opciones al crear partida | `document.addEventListener("change"` (`clip`, `after`, `part`, `tokens`, `target`, `src`) |
@@ -100,6 +100,7 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 - **Paleta nueva (en prueba, activa por defecto):** solo rosa `#ff3fa4`, morado `#e252ff`, celeste `#52d4ff`, turquesa `#52ffd4`, menta `#3dffb0`, lima `#c6ff3d` y verde lima `#9aff52`. Clase `html.p2` (`applyPalette`, `palette()`, guardada en `localStorage["ldt-paleta"]`, compartida entre los 4 celulares de prueba.html). Décadas `DEC_NEW`: 50s y 60s lima, 70s menta, 80s rosa, 90s morado, 2000s celeste, 2010s turquesa, 2020s verde lima. Error (`--bad`) pasa a rosa. En el Menú: botón "Colores: nuevos/originales" para comparar.
 
 ## Limitaciones conocidas
+- iPhone: el anfitrión nunca pausa Spotify (se dormiría en segundo plano). Si Spotify no suena tras dar play, no parte la cuenta regresiva y sale aviso con `[equipo · estado · canción]`.
 - iPhone: Spotify ignora el punto de inicio al cargar canción nueva y no hay forma de cargarla sin que suene: queda un instante del comienzo (Oso lo confirmó). Bluetooth no lo arregla; un parlante/equipo con **Spotify Connect** sí. Se propuso tapar el instante con un efecto de sonido en el celular del jugador de turno (sin respuesta). No permite volumen remoto. En pausa + segundo plano se desconecta.
 - El anfitrión debe tener la página del juego abierta y la pantalla encendida; si sale de Safari, los pedidos esperan hasta que vuelva.
 - Probar con 2 pestañas en un iPhone no sirve (Safari congela la de fondo): usar `prueba.html`.
@@ -116,12 +117,7 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (5/5)
-- Editor de playlists con nombre, cantidad, ✕ para quitar y campo "Agregar" (reemplaza el textarea).
-- Botón "Revisar playlists" al crear la partida; respaldo `hostStart` con posición al azar. Causa probable de repeticiones: playlist no propia (p. ej. la de rock generada por Spotify) → el juego no lee sus canciones y usa el aleatorio de Spotify.
-- La pantalla ya no salta al QR al pegar un link: `drawQR` lleva el QR a la vista solo una vez por sala y pantalla (`qrScrolledFor`; "Mostrar QR" lo reinicia). `render()` ahora envuelve a `renderView()` y conserva el campo activo, el cursor y la posición de la pantalla; el link a medio pegar se guarda en `plDraft`.
-- iPhone: "No encuentro ningún Spotify abierto" al empezar turno. Causa: la pausa previa dormía a Spotify en segundo plano. Ahora en celulares (`isPhoneDev`, tipo Smartphone/Tablet guardado en `spotifyDeviceInfo.type`) no se pausa nunca: `loadNoPause` (play de la canción + seek) y, si da 404, `wakeDevice` reintenta una vez.
-- `loadNoPause` confirma con `GET /me/player` que la canción elegida esté sonando (si no, transfiere con play:true y reintenta); si sigue sin sonar no parte la cuenta regresiva y muestra aviso con diagnóstico entre corchetes (equipo · sonando/en pausa · canción). Caso real de Oso: la barra corría pero no sonaba nada.
+### Pendientes de consolidar (0/5)
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.
@@ -135,3 +131,4 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 - Sin votación si la respuesta no se parece, playlists con `/items` (arreglo de repeticiones), interruptor "Pedir votación al grupo" + nombres limpios, interruptor alineado, paleta nueva de prueba con botón en el Menú.
 - Aleatorio sin fugas (`queueBad`, diagnóstico), pantalla final con línea de cada jugador (`winView`), pausa inmediata al cargar canción (iPhone sigue con un instante del comienzo; solución real: Spotify Connect), recuadro de playlists alineado, nombres bloqueados al elegir "¿Quién eres?".
 - Aviso de versión nueva (`checkUpdate`), quitado aviso de volumen de iPhone, QR con librería incluida y arriba del Menú, robo fallido muestra dónde iba en la línea del que robó, partida nueva en la misma sala obliga a elegir nombre otra vez (`st.gid`, `checkGame`).
+- Editor de playlists (nombre, cantidad, ✕, campo Agregar), respaldo `hostStart` con posición al azar, pantalla ya no salta al QR al pegar link (`qrScrolledFor`, `render` → `renderView` conserva foco y posición, `plDraft`), iPhone sin pausa al empezar turno (`isPhoneDev`, `loadNoPause`, `wakeDevice`), confirmación de que Spotify suena antes de partir la cuenta regresiva (aviso con diagnóstico).
