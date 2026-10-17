@@ -88,7 +88,7 @@ Fases de `st.phase`: `turn` → `check` (botón Revisar respuesta) → `steal` (
 - **Revelar:** el botón lo tiene **solo el jugador de turno** (los demás ven "se revela sola en N s"). Se puede si acertó, de inmediato; si falló, cuando el que roba ya ubicó la carta o pasaron los 5 s sin robo. Si no lo toca en **30 s**, se revela sola (`autoRevealLeft`, `doReveal`; lo hace su celular, y si no está, el anfitrión 5 s después).
 - **Siguiente turno:** solo el jugador que terminó su turno (respaldo: 60 s para todos).
 - **Canjear 3 fichas por una carta:** en su turno, antes de empezar; la carta entra directo a su línea; sigue jugando el turno.
-- Al fallar se muestra **dónde iba la carta** en su línea (✗ Aquí la puso / ✓ Aquí iba).
+- Al fallar se muestra **dónde iba la carta** en su línea (✗ Aquí la puso / ✓ Aquí iba). Si hubo **robo fallido**, todos ven también dónde iba en la línea del que robó ("Robo fallido · dónde iba en la línea de X"; si no alcanzó a ubicarla, solo "✓ Aquí iba").
 - Ya no se muestra el aviso "Año según el álbum en Spotify… Corregir año" al revelar (Oso pidió quitarlo). El código de `fixYear` sigue, pero sin botón.
 - Orden de turnos: el de la lista de nombres al crear la partida.
 - Opciones al crear: tiempo para responder (10/15/20/30/sin límite), parte de la canción (al azar / desde el comienzo), al terminar el tiempo (bajar volumen / seguir / pausar), cartas para ganar, fichas iniciales, playlist.
@@ -114,7 +114,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (3/5)
+### Pendientes de consolidar (4/5)
+- Al revelar con robo fallido se muestra a todos dónde iba la carta en la línea del que robó (`missHTML` con `st.sslot`).
 - QR: librería `qrcode-generator` (MIT) incluida dentro de `index.html` (antes `qrcodejs` desde cdnjs, que fallaba); `drawQR` dibuja SVG. En el Menú, el QR aparece arriba y el botón cambia a "Ocultar QR".
 - Quitado el aviso "Spotify no deja cambiar el volumen de este aparato…".
 - Aviso "Hay una versión nueva del juego" (`checkUpdate`: cada 60 s y al volver a la pestaña compara `VERSION` publicado con el cargado; botón Actualizar recarga con `?v=<hora>`).

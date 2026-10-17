@@ -1073,7 +1073,7 @@ function drawQR(){
   el.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-const VERSION = "17-oct v26";
+const VERSION = "17-oct v27";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
@@ -1310,6 +1310,7 @@ ${foot}`;
       ${voteHTML(p)}
     </section>
     ${!r.ok?`<section style="display:flex;flex-direction:column;gap:10px"><span class="label">Dónde iba en la línea de ${esc(p.name)}</span>${missHTML(p.tl, st.song, st.slot)}</section>`:""}
+    ${!r.ok&&!r.stolen&&st.stealer!=null&&st.players[st.stealer]?`<section style="display:flex;flex-direction:column;gap:10px"><span class="label">Robo fallido · dónde iba en la línea de ${esc(st.players[st.stealer].name)}</span>${st.sslot==null?`<p class="muted" style="margin:0">${esc(st.players[st.stealer].name)} no alcanzó a ubicarla.</p>`:""}${missHTML(st.players[st.stealer].tl, st.song, st.sslot)}</section>`:""}
     ${owner?`<section style="display:flex;flex-direction:column;gap:10px"><span class="label">Línea de ${esc(owner.name)}</span>${tlHTML(owner.tl,{highlight:st.song})}</section>`:""}
     ${nextBtnHTML(p)}${foot}`;
     return;
