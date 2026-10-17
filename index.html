@@ -1049,8 +1049,7 @@ function hostPanel(){
     <div class="row" style="margin-top:10px"><button class="gold" data-act="spLogin">Conectar Spotify</button></div></div>`;
   if (tok().v !== SCOPE_V) return `<div class="banner">Vuelve a conectar Spotify una vez: así el juego pone cada canción directo, sin pasar por otras.
     <div class="row" style="margin-top:10px"><button class="gold" data-act="spLogin">Reconectar Spotify</button></div></div>`;
-  if (st && ls.get("noVolume") && (st.after || "duck") === "duck") return `<div class="banner">Spotify no deja cambiar el volumen de este aparato desde el juego (pasa con iPhone). La música sigue sonando igual: bájala con los botones del celular o del parlante.
-    <div class="row" style="margin-top:10px"><button class="ghost" data-act="noVolOk">Entendido</button></div></div>`;
+  // Aviso de "Spotify no deja cambiar el volumen" quitado a pedido de Oso: si no se puede bajar, simplemente sigue sonando igual
   return "";
 }
 function linkHTML(){
@@ -1067,7 +1066,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v24";
+const VERSION = "17-oct v25";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
