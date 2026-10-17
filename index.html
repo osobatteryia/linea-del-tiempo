@@ -840,13 +840,14 @@ function voteInfo(){
   const need = Math.floor(voters / 2) + 1;
   const votes = st.votes || {};
   const yes = Object.entries(votes).filter(([k, v]) => v === true && +k !== st.cur).length;
-  const eligible = !!(st.guess && st.guess.t && st.guess.a) && !st.autoBonus && !(st.res && st.res.stolen) && (p.tk < 5 || st.voteWon);
+  const eligible = !!(st.res && st.res.ok) && !!(st.guess && st.guess.t && st.guess.a) && !st.autoBonus && !(st.res && st.res.stolen) && (p.tk < 5 || st.voteWon);
   return { voters, need, yes, votes, eligible };
 }
 function voteHTML(p){
   if (st.autoBonus) return `<p class="verdict ok" style="font-size:1.1rem">¡Adivinó las dos! +1 ficha</p>`;
   if (st.res && st.res.stolen) return `<p class="muted">Como ${esc(st.players[st.stealer].name)} le robó la carta, no hay votación de ficha.</p>`;
-  if (!(st.guess && st.guess.t && st.guess.a)) return `<p class="muted">Para votar la ficha, ${esc(p.name)} tenía que completar canción y artista.</p>`;
+  if (!(st.res && st.res.ok)) return `<p class="muted">Como ${esc(p.name)} no acertó el año, no hay votación de ficha.</p>`;
+  if (!(st.guess && st.guess.t && st.guess.a)) return `<p class="muted">Para votar la ficha, ${esc(p.name)} tenía que acertar el año y completar canción y artista.</p>`;
   const v = voteInfo();
   if (st.voteWon) return `<p class="verdict ok" style="font-size:1.1rem">¡El grupo le dio la ficha! +1</p>`;
   if (p.tk >= 5) return `<p class="muted">${esc(p.name)} ya tiene 5 fichas, el máximo.</p>`;
@@ -917,7 +918,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v3";
+const VERSION = "17-oct v4";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
