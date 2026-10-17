@@ -535,7 +535,11 @@ function markHeard(uri){
   const hist = ls.get("heardHist", []).filter(u => u !== uri); hist.push(uri);
   ls.set("heardHist", hist.slice(-2000));
 }
+// Si alguna vez suena otra canción en vez de la elegida, la cola de Spotify quedó con restos:
+// desde ahí se usa solo el método directo (play con la canción exacta), que no usa la cola.
+let queueBad = false;
 async function loadPausedAt(dev, t, pos){
+  if (queueBad) return false;
   try {
     await sp("POST", "/me/player/queue?uri=" + encodeURIComponent(t.uri) + "&device_id=" + dev);
     await wait(250);
@@ -550,7 +554,7 @@ async function loadPausedAt(dev, t, pos){
         ok = true; break;
       }
     }
-    if (!ok) return false;
+    if (!ok){ queueBad = true; return false }
     await sp("PUT", "/me/player/seek?position_ms=" + pos + "&device_id=" + dev);
     await wait(250);
     await sp("PUT", "/me/player/play?device_id=" + dev);
@@ -558,7 +562,9 @@ async function loadPausedAt(dev, t, pos){
   } catch (e) { return false }
 }
 async function hostPlayTurn(){
-  const tracks = await loadPlaylist();
+  let tracks;
+  try { tracks = await loadPlaylist() }
+  catch (e) { plWarn = "No pude leer la playlist (" + ((e && e.code) || "error") + "). Las canciones salen del aleatorio de Spotify y se pueden repetir. Revisa que la playlist sea tuya o colaborativa."; throw { fallback: true } }
   if (!tracks.length) throw { fallback: true };
   const t = pickFresh(tracks);
   markHeard(t.uri);
@@ -583,9 +589,8 @@ async function hostPlayTurn(){
     if (len){ clipDeadline = Date.now() + len * 1000; clipTimer = setTimeout(afterClip, len * 1000) }
     return;
   }
-  // Se manda la canción como lista (la elegida primero y luego las demás al azar): así Spotify respeta mejor el punto de inicio
-  const rest = shuffle(tracks.filter(x => x.uri !== t.uri).map(x => x.uri)).slice(0, 60);
-  await sp("PUT", "/me/player/play?device_id=" + dev, { uris: [t.uri, ...rest], position_ms: pos });
+  // Se manda SOLO la canción elegida: así, si sigue sonando, no pasan otras canciones de la playlist que después saldrían "repetidas"
+  await sp("PUT", "/me/player/play?device_id=" + dev, { uris: [t.uri], position_ms: pos });
   ls.set("clipTrack:" + room, { uri: t.uri, name: t.name, artists: t.artists, date: t.date, turn: st.round + ":" + st.cur });
   // Algunos celulares parten la canción desde el inicio e ignoran el punto pedido: se revisa y se corrige
   if (pos){
@@ -1032,7 +1037,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v18";
+const VERSION = "17-oct v19";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
@@ -1133,6 +1138,7 @@ function render(){
       ${spot()?`<button class="ghost" data-act="otra">Otra canción en Spotify</button>`:""}
       <button class="ghost" data-act="end">Terminar y ver resultados</button>
       <button class="${confirmReset?"primary":"ghost"}" data-act="again">${confirmReset?"Sí, borrar la partida para todos":"Nueva partida (borra esta)"}</button>
+      ${isHost&&spot()?`<p class="muted" style="font-size:.85rem">🎵 Playlist: ${plCache.tracks?plCache.tracks.length+" canciones":"se carga al primer turno"} · sonaron en esta partida: ${(st.played||[]).length} · historial de este celular: ${ls.get("heardHist",[]).length}${queueBad?" · modo directo":""}</p>`:""}
       <button class="ghost" data-act="palette">Colores: ${palette()==="nueva"?"nuevos (tocar para ver los originales)":"originales (tocar para ver los nuevos)"}</button>
       <button class="ghost" data-act="leave">Salir de la sala</button></section>
       ${showInvite?linkHTML():""}`;

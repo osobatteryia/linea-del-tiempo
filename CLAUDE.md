@@ -27,6 +27,8 @@ Juego musical estilo **Hitster** para jugar en grupo, cada uno desde su celular.
 - **Pedidos al anfitrión:** los demás celulares escriben `st.req = {type, id}` (`play`, `check`, `reveal`, `buy`); el anfitrión los ejecuta en `hostCheck()` y limpia `st.req`. Si el anfitrión no responde en ~9 s, se muestra aviso con "Cancelar y volver a intentar".
 - Playlist por defecto: `https://open.spotify.com/playlist/4BX1DjvzqAT3GePXKGzyTn` ("Línea del Tiempo Musical: Adivina el Año", privada, de Oso). Al crear la partida se pueden pegar **varias playlists** (una por línea, `playlistUris`); se mezclan sin duplicados (hasta 1000 canciones por playlist).
 - **Lectura de playlists (cambio de Spotify, feb 2026):** se usa `GET /playlists/{id}/items` (respuesta `items[].item`); `/tracks` quedó eliminado y, al fallar, el juego caía al método antiguo (shuffle de Spotify) y las canciones se repetían. Spotify **solo entrega canciones de playlists propias o colaborativas**; si no puede leer ninguna, se avisa (`plWarn`).
+- **Reproducción sin "fugas":** el método directo manda **solo** la canción elegida (`uris:[t.uri]`), no una lista; antes mandaba 60 canciones más que seguían sonando y luego parecían repetidas. Si el método de cola (`loadPausedAt`) hace sonar otra canción (cola de Spotify con restos), se marca `queueBad` y desde ahí se usa solo el directo. Si no se puede leer la playlist se muestra el motivo (`plWarn`).
+- **Diagnóstico en el Menú del anfitrión:** "🎵 Playlist: N canciones · sonaron en esta partida · historial de este celular · modo directo".
 - **Sin repetir:** `pickFresh` evita canciones ya sonadas en la partida (`st.played`, `st.used`), las que ya son carta de alguien, y las sonadas en partidas anteriores (historial `heardHist` en el anfitrión, `markHeard`). Si ya sonaron todas, elige entre el 25 % más antiguo.
 - Los nombres de Spotify se muestran limpios (`cleanName`: quita "- 2019 Remaster", "(Live)", "- En Vivo", etc.).
 - Lista interna `S` de 150 canciones con año (latinas/chilenas + internacionales), usada para corregir años y como respaldo del canje.
@@ -112,7 +114,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (0/5)
+### Pendientes de consolidar (1/5)
+- Aleatorio: solo se reproduce la canción elegida (sin lista extra), detección de cola de Spotify con restos (`queueBad`), aviso si la playlist no se puede leer, diagnóstico en el Menú del anfitrión.
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.
