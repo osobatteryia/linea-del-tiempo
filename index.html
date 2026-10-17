@@ -711,7 +711,7 @@ function reveal(){
   if (!ok && st.stealer != null && fits(p.tl, st.sslot, y)) stolen = true;
   const owner = ok ? st.cur : stolen ? st.stealer : null;
   if (owner != null) insert(st.players[owner].tl, st.song);
-  st.res = { ok, stolen, owner }; st.phase = "reveal"; st.robando = null;
+  st.res = { ok, stolen, owner }; st.phase = "reveal"; st.robando = null; st.revealAt = Date.now();
   if (st.guess && (st.guess.t || st.guess.a)){
     st.guessRes = { t: !!st.guess.t && guessTitle(st.guess.t, st.song[0]), a: !!st.guess.a && guessArtist(st.guess.a, st.song[1]) };
     if (st.guessRes.t && st.guessRes.a && !st.bonus){ p.tk = Math.min(5, p.tk + 1); st.bonus = true; st.autoBonus = true }
@@ -764,6 +764,18 @@ setInterval(() => {
   // Si el jugador de turno no revela en 30 s, el botón aparece para todos
   if (!b && st.stealAt && Date.now() - st.stealAt > REVEAL_FALLBACK && !st.req) render();
 }, 250);
+
+// ===== Siguiente turno: solo el jugador que terminó su turno (respaldo para todos a los 60 s) =====
+const NEXT_FALLBACK = 60000;
+function nextOwner(){ return allHere() || me === st.cur || (st.revealAt && Date.now() - st.revealAt > NEXT_FALLBACK) }
+function nextBtnHTML(p){
+  if (nextOwner()) return `<button class="primary" id="nextBtn" data-act="next">Siguiente turno</button>`;
+  return `<p class="muted" id="nextInfo">Esperando que ${esc(p.name)} pase al siguiente turno.</p>`;
+}
+setInterval(() => {
+  if (!st || st.phase !== "reveal" || menuOpen) return;
+  if (!document.getElementById("nextBtn") && st.revealAt && Date.now() - st.revealAt > NEXT_FALLBACK) render();
+}, 1000);
 
 // ===== Votación de ficha =====
 // Si el jugador completó canción y artista pero el juego no le dio la ficha, los demás votan.
@@ -1056,7 +1068,7 @@ function render(){
     </section>
     ${!r.ok?`<section style="display:flex;flex-direction:column;gap:10px"><span class="label">Dónde iba en la línea de ${esc(p.name)}</span>${missHTML(p.tl, st.song, st.slot)}</section>`:""}
     ${owner?`<section style="display:flex;flex-direction:column;gap:10px"><span class="label">Línea de ${esc(owner.name)}</span>${tlHTML(owner.tl,{highlight:st.song})}</section>`:""}
-    <button class="primary" data-act="next">Siguiente turno</button>${foot}`;
+    ${nextBtnHTML(p)}${foot}`;
     return;
   }
   if (st.phase === "win"){
@@ -1147,7 +1159,7 @@ document.addEventListener("click", e => {
     case "vote": { if (typeof me !== "number") return; const val = el.dataset.v === "1";
       if (!applyVote(me, val)) return; myVote = { key: st.round + ":" + st.cur, val }; break }
     case "voteAll": { if (!allHere() || st.voteWon || !voteInfo().eligible) return; st.voteWon = true; st.bonus = true; const p = st.players[st.cur]; p.tk = Math.min(5, p.tk + 1); break }
-    case "next": if (st.phase === "reveal") nextTurn(); break;
+    case "next": if (st.phase === "reveal" && nextOwner()) nextTurn(); else return; break;
     case "end": st.phase = "win"; menuOpen = false; break;
     case "again": if (!confirmReset){ confirmReset = true; render(); return } confirmReset = false; st = null; menuOpen = false; break;
     case "again2": st = null; break;
