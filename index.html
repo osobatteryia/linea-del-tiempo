@@ -82,7 +82,9 @@ details ol{margin:10px 0 0;padding-left:20px;display:flex;flex-direction:column;
 .foot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .foot button{min-height:40px;padding:8px 14px;font-size:.85rem}
 .podium{display:flex;flex-direction:column;gap:8px}
-.podium div{display:flex;justify-content:space-between;background:var(--surface);border-radius:12px;padding:12px 16px}
+.podium div,.podium button{display:flex;justify-content:space-between;align-items:center;background:var(--surface);border-radius:12px;padding:12px 16px;border:1.5px solid transparent;color:var(--fg);font:inherit;font-size:1rem;width:100%;text-align:left;cursor:pointer}
+.podium button.on{border-color:var(--accent);box-shadow:0 0 14px color-mix(in oklab,var(--accent) 35%,transparent)}
+.podium .tu{font-style:normal;font-size:.75rem;font-weight:700;background:var(--gold);color:var(--ink);border-radius:999px;padding:2px 8px;margin-left:6px}
 .podium b{font-family:var(--mono)}
 .banner{background:color-mix(in oklab,var(--gold) 16%,var(--surface));border:1px solid var(--gold);border-radius:14px;padding:12px 14px;font-size:.9rem}
 .you{background:var(--gold);color:var(--ink);border-radius:999px;padding:1px 7px;font-size:.7rem;font-weight:700}
@@ -1037,7 +1039,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v19";
+const VERSION = "17-oct v20";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
@@ -1280,12 +1282,20 @@ ${foot}`;
   if (st.phase === "win"){
     const rank = [...st.players].sort((a,b)=>b.tl.length-a.tl.length||b.tk-a.tk);
     app.innerHTML = `${statusHTML()}<header class="hero"><span class="label">Fin de la partida</span><h1>¡Ganó ${esc(rank[0].name)}!</h1></header>
-    <div class="podium">${rank.map(q=>`<div><span>${esc(q.name)}</span><b>${q.tl.length} cartas</b></div>`).join("")}</div>
-    <section style="display:flex;flex-direction:column;gap:10px"><span class="label">Línea ganadora</span>${tlHTML(rank[0].tl)}</section>
+    ${(()=>{
+      const wi = st.players.indexOf(rank[0]);
+      const sel = winView != null && st.players[winView] ? winView : wi;
+      const q = st.players[sel];
+      const who = sel === wi ? "Línea ganadora · " + esc(q.name) : sel === me && !allHere() ? "Tu línea de tiempo" : "Línea de " + esc(q.name);
+      return `<p class="muted" style="font-size:.85rem;margin:0">Toca un jugador para ver cómo quedó su línea.</p>
+      <div class="podium">${rank.map(r=>{const i=st.players.indexOf(r);return `<button class="${i===sel?"on":""}" data-act="winView" data-i="${i}"><span>${esc(r.name)}${i===me&&!allHere()?' <em class="tu">tú</em>':""}</span><b>${r.tl.length} ${r.tl.length===1?"carta":"cartas"}</b></button>`}).join("")}</div>
+      <section style="display:flex;flex-direction:column;gap:10px"><span class="label">${who}</span>${tlHTML(q.tl)}</section>`;
+    })()}
     ${isHost?`<button class="primary" data-act="again2">Nueva partida</button>`:`<p class="muted">El anfitrión puede empezar otra partida.</p>`}`;
   }
 }
 let showInvite = false;
+let winView = null; // en la pantalla final: línea que este celular está mirando
 let viewTl = null; // línea de otro jugador que este celular está mirando (solo en este celular)
 // Botones para mirar la línea de tiempo de los demás jugadores
 function viewerHTML(){
@@ -1340,6 +1350,7 @@ document.addEventListener("click", e => {
     case "copy": { const url = REDIRECT + "?sala=" + room; (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => { el.textContent = "Link copiado" }).catch(() => { el.textContent = url }); return }
     case "invite": showInvite = !showInvite; render(); return;
     case "palette": try { localStorage.setItem("ldt-paleta", palette() === "nueva" ? "orig" : "nueva") } catch (e) {} applyPalette(); render(); return;
+    case "winView": winView = i; render(); return;
     case "viewTl": viewTl = viewTl === i ? null : i; render(); return;
     case "saveCid": { const v = (document.getElementById("cid")?.value || "").trim(); if (v){ ls.set("spotifyClientId", v); render() } return }
     case "spLogin": spotifyLogin(); return;
@@ -1384,7 +1395,7 @@ document.addEventListener("click", e => {
     case "next": if (st.phase === "reveal" && nextOwner()) nextTurn(); else return; break;
     case "end": st.phase = "win"; menuOpen = false; break;
     case "again": if (!confirmReset){ confirmReset = true; render(); return } confirmReset = false; st = null; menuOpen = false; break;
-    case "again2": st = null; break;
+    case "again2": st = null; winView = null; break;
     default: return;
   }
   if (shared) commit();

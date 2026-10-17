@@ -64,7 +64,7 @@ Para encontrar algo rápido sin leer todo el archivo: busca el nombre con `grep 
 | Botón Revelar (solo jugador de turno, sola a los 30 s) | `STEAL_WINDOW`, `revealWait`, `revealOwner`, `revealReadyAt`, `autoRevealLeft`, `doReveal`, `canReveal`, `revealBtnHTML` |
 | Botón Siguiente turno (solo jugador de turno) | `NEXT_FALLBACK`, `nextOwner`, `nextBtnHTML` |
 | Votación de ficha | `voteInfo`, `voteHTML`, `applyVote`, `myVote` |
-| Ver la línea de otro jugador | `viewerHTML`, `viewTl`, `case "viewTl"` |
+| Ver la línea de otro jugador | `viewerHTML`, `viewTl`, `case "viewTl"`; en la pantalla final: `winView` |
 | Marcador, barra de sala, avisos, panel de Spotify, QR | `scoreHTML`, `statusHTML`, `msgHTML`, `hostPanel`, `linkHTML`, `drawQR` |
 | Pantallas | `render()`: portada (`if (!room)`), crear partida (`if (!st)`), menú (`menuOpen`), fases `turn`, `check`, `steal`, `needyear`, `reveal`, `win`. Línea propia de cada jugador: `myTl` |
 | Cuenta regresiva y entrega automática al acabarse el tiempo | `timeLeft` + `setInterval` en `// ===== Cuenta regresiva =====` |
@@ -114,7 +114,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (1/5)
+### Pendientes de consolidar (2/5)
+- Pantalla final: cada jugador toca un nombre del ranking para ver su línea o la de otros (`winView`, `case "winView"`, solo en ese celular; por defecto la ganadora).
 - Aleatorio: solo se reproduce la canción elegida (sin lista extra), detección de cola de Spotify con restos (`queueBad`), aviso si la playlist no se puede leer, diagnóstico en el Menú del anfitrión.
 
 ### Historial
