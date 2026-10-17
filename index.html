@@ -946,7 +946,10 @@ function render(){
       : `<div class="banner">${isHost?"Spotify está tardando en responder.":"El celular que creó la sala no responde. Desbloquéalo y deja abierta la pestaña del juego: lo hará solo apenas vuelva."}
           <div class="row" style="margin-top:10px"><button class="ghost" data-act="cancelReq">Cancelar y volver a intentar</button></div></div>`;
   }
-  const foot = `<div class="foot"><span class="label" style="align-self:center">Ronda ${st.round}${spot()?"":` · quedan ${st.deck.length} canciones`}</span><button class="ghost" data-act="menu">Menú</button></div>`;
+  // Línea propia, para los que no están jugando el turno (cada uno ve sus cartas)
+  const myTl = typeof me === "number" && me !== st.cur && st.players[me] && !(st.phase === "reveal" && st.res && st.res.owner === me)
+    ? `<section class="mine" style="display:flex;flex-direction:column;gap:10px"><span class="label">Tu línea de tiempo · ${st.players[me].tl.length} ${st.players[me].tl.length === 1 ? "carta" : "cartas"}</span>${tlHTML(st.players[me].tl)}</section>` : "";
+  const foot = myTl + `<div class="foot"><span class="label" style="align-self:center">Ronda ${st.round}${spot()?"":` · quedan ${st.deck.length} canciones`}</span><button class="ghost" data-act="menu">Menú</button></div>`;
   const head = `${statusHTML()}${hostPanel()}${scoreHTML()}`;
 
   if (menuOpen){
