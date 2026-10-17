@@ -35,7 +35,7 @@ Juego musical estilo **Hitster** para jugar en grupo, cada uno desde su celular.
 
 ## Cómo suena cada turno (Spotify)
 1. El jugador de turno toca **▶ Empezar mi turno** (antes no puede elegir posición).
-2. El anfitrión elige una canción de la playlist no usada (`loadPlaylist`, `hostPlayTurn`): pausa la anterior, la **carga en pausa** (cola + siguiente), la mueve a un **punto al azar** y le da play (`loadPausedAt`). Esto es para que en iPhone no suene el comienzo; si falla, usa `play` con `uris` + `position_ms`, y como último recurso el método antiguo (siguiente + seek).
+2. El anfitrión elige una canción de la playlist no usada (`loadPlaylist`, `hostPlayTurn`): pausa la anterior, la **carga en pausa** (cola + siguiente + **pausa inmediata dos veces**, porque en iPhone "siguiente" da play solo), la mueve a un **punto al azar** y le da play (`loadPausedAt`). Si falla, usa `loadDirectAt` (play solo de esa canción + pausa inmediata + seek + play); último recurso el método antiguo. En iPhone puede quedar un "clic" muy corto del comienzo: Spotify iOS ignora `position_ms` y no deja bajar el volumen. Con parlante Spotify Connect/computador/Android no pasa.
 3. Corre la cuenta regresiva (10 s por defecto) en todos los celulares. Al llegar a 0 se entrega lo que haya elegido el jugador.
 4. Al terminar el tiempo, el volumen baja a la mitad (`duck`) y vuelve en el próximo turno. **En iPhone Spotify no permite cambiar el volumen** → se avisa al anfitrión ("Entendido" desactiva). **No se pausa** por defecto: en iPhone, Spotify en pausa y en segundo plano se desconecta ("No encuentro ningún Spotify abierto").
 5. Al revelar, el anfitrión usa la canción que guardó al empezar (`clipTrack:<sala>`), no lo que diga Spotify.
@@ -114,7 +114,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (2/5)
+### Pendientes de consolidar (3/5)
+- Inicio al azar sin "comienzo": pausa inmediata tras cargar la canción (cola o directo) y luego seek + play; `queueBad` solo si suena una canción distinta a la anterior 3 veces.
 - Pantalla final: cada jugador toca un nombre del ranking para ver su línea o la de otros (`winView`, `case "winView"`, solo en ese celular; por defecto la ganadora).
 - Aleatorio: solo se reproduce la canción elegida (sin lista extra), detección de cola de Spotify con restos (`queueBad`), aviso si la playlist no se puede leer, diagnóstico en el Menú del anfitrión.
 

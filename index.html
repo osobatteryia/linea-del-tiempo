@@ -540,28 +540,50 @@ function markHeard(uri){
 // Si alguna vez suena otra canción en vez de la elegida, la cola de Spotify quedó con restos:
 // desde ahí se usa solo el método directo (play con la canción exacta), que no usa la cola.
 let queueBad = false;
-async function loadPausedAt(dev, t, pos){
+async function loadPausedAt(dev, t, pos, prevUri){
   if (queueBad) return false;
   try {
     await sp("POST", "/me/player/queue?uri=" + encodeURIComponent(t.uri) + "&device_id=" + dev);
-    await wait(250);
+    await wait(200);
     await sp("POST", "/me/player/next?device_id=" + dev);
-    let ok = false;
-    for (let k = 0; k < 8; k++){
-      await wait(300);
-      const c = await sp("GET", "/me/player/currently-playing");
-      if (c && c.item && c.item.uri === t.uri){
-        // Si Spotify ya empezó a sonar, se pausa al tiro
+    // En iPhone, "siguiente" vuelve a dar play solo: se pausa altiro (dos veces) para que no alcance a sonar el comienzo
+    sp("PUT", "/me/player/pause?device_id=" + dev).catch(() => {});
+    setTimeout(() => sp("PUT", "/me/player/pause?device_id=" + dev).catch(() => {}), 120);
+    let ok = false, other = 0;
+    for (let k = 0; k < 20; k++){
+      await wait(150);
+      let c = null; try { c = await sp("GET", "/me/player/currently-playing") } catch (e) {}
+      const u = c && c.item && c.item.uri;
+      if (u === t.uri){
         if (c.is_playing) { try { await sp("PUT", "/me/player/pause?device_id=" + dev) } catch (e) {} }
         ok = true; break;
       }
+      // Suena otra canción que no es la anterior: la cola de Spotify tenía restos
+      if (u && u !== prevUri && ++other >= 3) break;
     }
-    if (!ok){ queueBad = true; return false }
+    if (!ok){ if (other >= 3) queueBad = true; return false }
     await sp("PUT", "/me/player/seek?position_ms=" + pos + "&device_id=" + dev);
-    await wait(250);
+    await wait(300);
     await sp("PUT", "/me/player/play?device_id=" + dev);
     return true;
   } catch (e) { return false }
+}
+// Método directo: carga la canción exacta, la pausa altiro, la mueve al punto y recién ahí la reproduce
+async function loadDirectAt(dev, t, pos){
+  await sp("PUT", "/me/player/play?device_id=" + dev, { uris: [t.uri], position_ms: pos });
+  if (!pos) return;
+  sp("PUT", "/me/player/pause?device_id=" + dev).catch(() => {});
+  setTimeout(() => sp("PUT", "/me/player/pause?device_id=" + dev).catch(() => {}), 120);
+  for (let k = 0; k < 20; k++){
+    await wait(150);
+    let c = null; try { c = await sp("GET", "/me/player/currently-playing") } catch (e) {}
+    if (!c || !c.item || c.item.uri !== t.uri) continue;
+    if (c.is_playing) { try { await sp("PUT", "/me/player/pause?device_id=" + dev) } catch (e) {} }
+    break;
+  }
+  try { await sp("PUT", "/me/player/seek?position_ms=" + pos + "&device_id=" + dev) } catch (e) {}
+  await wait(300);
+  await sp("PUT", "/me/player/play?device_id=" + dev);
 }
 async function hostPlayTurn(){
   let tracks;
@@ -580,10 +602,11 @@ async function hostPlayTurn(){
   await unduck(dev);
   const ctx = playlistUris(st.playlist)[0];
   // Corta la canción anterior justo antes, para que no se mezcle con la nueva
+  let prevUri = null; try { const c = await sp("GET", "/me/player/currently-playing"); prevUri = c && c.item && c.item.uri } catch (e) {}
   try { await sp("PUT", "/me/player/pause?device_id=" + dev) } catch (e) {}
   // En iPhone, Spotify ignora el punto de inicio al cargar una canción nueva y suena el comienzo.
   // Para evitarlo: se carga la canción en pausa (cola + siguiente), se mueve al punto y recién ahí se reproduce.
-  if (pos && await loadPausedAt(dev, t, pos)){
+  if (pos && await loadPausedAt(dev, t, pos, prevUri)){
     ls.set("clipTrack:" + room, { uri: t.uri, name: t.name, artists: t.artists, date: t.date, turn: st.round + ":" + st.cur });
     st.started = true;
     st.clipAt = len ? Date.now() : null;
@@ -592,18 +615,8 @@ async function hostPlayTurn(){
     return;
   }
   // Se manda SOLO la canción elegida: así, si sigue sonando, no pasan otras canciones de la playlist que después saldrían "repetidas"
-  await sp("PUT", "/me/player/play?device_id=" + dev, { uris: [t.uri], position_ms: pos });
+  await loadDirectAt(dev, t, pos);
   ls.set("clipTrack:" + room, { uri: t.uri, name: t.name, artists: t.artists, date: t.date, turn: st.round + ":" + st.cur });
-  // Algunos celulares parten la canción desde el inicio e ignoran el punto pedido: se revisa y se corrige
-  if (pos){
-    for (let k = 0; k < 4; k++){
-      await wait(400);
-      let c = null; try { c = await sp("GET", "/me/player/currently-playing") } catch (e) {}
-      if (!c || !c.item || c.item.uri !== t.uri) continue;
-      if (Math.abs((c.progress_ms || 0) - pos) > 2500){ try { await sp("PUT", "/me/player/seek?position_ms=" + pos + "&device_id=" + dev) } catch (e) {} }
-      break;
-    }
-  }
   st.started = true;
   st.clipAt = len ? Date.now() : null;
   clearTimeout(clipTimer);
@@ -1039,7 +1052,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v20";
+const VERSION = "17-oct v21";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
