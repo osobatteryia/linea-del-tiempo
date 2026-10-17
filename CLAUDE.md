@@ -114,7 +114,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (3/5)
+### Pendientes de consolidar (4/5)
+- Recuadro de playlists (textarea) alineado con los demás campos (`box-sizing:border-box`).
 - Inicio al azar sin "comienzo": pausa inmediata tras cargar la canción (cola o directo) y luego seek + play; `queueBad` solo si suena una canción distinta a la anterior 3 veces.
 - Pantalla final: cada jugador toca un nombre del ranking para ver su línea o la de otros (`winView`, `case "winView"`, solo en ese celular; por defecto la ganadora).
 - Aleatorio: solo se reproduce la canción elegida (sin lista extra), detección de cola de Spotify con restos (`queueBad`), aviso si la playlist no se puede leer, diagnóstico en el Menú del anfitrión.
