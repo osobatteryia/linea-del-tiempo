@@ -74,7 +74,7 @@ Fases de `st.phase`: `turn` → `check` (botón Revisar respuesta) → `steal` (
 - Cada jugador parte con 1 carta a la vista y N fichas (2 por defecto, máx. 5). Gana quien llega a la meta (10 por defecto).
 - Turno: elegir posición (antes / entre / después); mismo año vale a cualquier lado.
 - Casillas opcionales **canción** y **artista** (con micrófono para dictar, español `es-CL`). Si **acertó el año** y acierta las dos (comparación tolerante a tildes, mayúsculas, signos, artículos iniciales, "(Remaster)"/"- …" y ~1 error cada 4 letras; en la **canción** un pedazo del nombre vale solo si es al menos la mitad, ej. "corazon" ya no vale por "Corazón Espinado"; en el **artista** basta una palabra o uno de los artistas) → +1 ficha automática al revelar. Si falló el año, no hay ficha.
-- **Votación de ficha:** solo si **acertó el año** (carta bien ubicada) **y** completó canción y artista, pero no acertó las dos; los **demás** votan 👍/👎; se entrega con mayoría de los demás (empate o no votar = no). El jugador de turno no puede darse la ficha. En celular compartido, un solo botón "El grupo decidió darle la ficha". No hay votación si le robaron la carta.
+- **Votación de ficha:** solo si **acertó el año** (carta bien ubicada) **y** completó canción y artista, pero no acertó las dos; los **demás** votan 👍/👎; se entrega con mayoría de los demás (empate o no votar = no). **El voto no se puede cambiar**; apenas los "no" hacen imposible la mayoría se muestra "El grupo decidió no darle la ficha" (`lost` en `voteInfo`). El jugador de turno no puede darse la ficha. En celular compartido, un solo botón "El grupo decidió darle la ficha". No hay votación si le robaron la carta.
 - **Saltar canción:** 1 ficha.
 - **Cada celular ve solo su propia línea** (el jugador de turno ve la suya como "Tu elección"). Las líneas de los demás se ven con los botones de "Ver la línea de otro jugador" (`viewerHTML`, `viewTl`, solo en ese celular). Al revelar, todos ven el resultado (dónde iba / línea del que se quedó la carta).
 - **Nadie ve dónde puso la carta el jugador de turno** hasta que se revela (solo él, o el celular compartido).
@@ -109,7 +109,8 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (3/5)
+### Pendientes de consolidar (4/5)
+- Votación: voto fijo (no se cambia) y resultado visible cuando gana el "no".
 - Canción: escribir solo una palabra ya no basta; el pedazo debe ser al menos la mitad del nombre (`close(g,t,half)`).
 - Al revisar y acertar: aviso grande "🎉 ¡Acertaste! Ganaste esta carta" (los demás: "¡X acertó y ganó esta carta!").
 - Quitado el aviso "Año según el álbum en Spotify… Corregir año" de la pantalla de revelar.
