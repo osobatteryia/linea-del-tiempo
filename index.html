@@ -237,13 +237,15 @@ function findInDB(name,artist){
 // Comparación tolerante para adivinar canción y artista
 function lev(a,b){const m=a.length,n=b.length;if(!m)return n;if(!n)return m;let p=Array.from({length:n+1},(_,j)=>j);
   for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c}return p[n]}
-function close(g,t){
+// half=true (canción): un pedazo del nombre vale solo si es al menos la mitad del nombre
+function close(g,t,half){
   g=norm(g).replace(/^(the|los|las|la|el) /,"");t=norm(t).replace(/^(the|los|las|la|el) /,"");
   if(g.length<2||!t)return false;
-  if(g===t||(g.length>=4&&(t.includes(g)||g.includes(t))))return true;
+  if(g===t||(g.length>=4&&g.includes(t)))return true;
+  if(g.length>=4&&t.includes(g)&&(!half||g.length>=t.length*0.5))return true;
   return 1-lev(g,t)/Math.max(g.length,t.length)>=0.75;
 }
-function guessTitle(g,t){return close(g,t)}
+function guessTitle(g,t){return close(g,t,true)}
 function guessArtist(g,a){
   const parts=String(a).split(/,|&| y | and | ft\.? | feat\.? | featuring | x /i).map(x=>x.trim()).filter(Boolean);
   return close(g,a)||parts.some(x=>close(g,x));
@@ -966,7 +968,7 @@ function drawQR(){
   try { new QRCode(el, { text: REDIRECT + "?sala=" + room, width: 168, height: 168, colorDark: "#0e1b21", colorLight: "#f4ede1" }) } catch (e) {}
 }
 
-const VERSION = "17-oct v10";
+const VERSION = "17-oct v11";
 function render(){
   const app = $app();
   // Partida que venía de la versión anterior: el robo empezaba sin revisar la respuesta
