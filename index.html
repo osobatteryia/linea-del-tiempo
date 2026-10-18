@@ -520,12 +520,21 @@ function playlistUri(s){
   const m = String(s || "").match(/playlist[\/:]([A-Za-z0-9]+)/);
   return m ? "spotify:playlist:" + m[1] : null;
 }
+// Equipo elegido por el anfitrión para la música (TV, Android, computador, parlante): se usa siempre que aparezca
+const devPick = () => ls.get("spotifyPick");
 async function pickDevice(){
   const d = await sp("GET", "/me/player/devices");
   const list = (d && d.devices) || [];
-  const saved = ls.get("spotifyDevice");
-  const dev = list.find(x => x.is_active) || list.find(x => x.id === saved) || list[0];
-  if (!dev) throw { msg: "No encuentro ningún Spotify abierto. Abre la app de Spotify en el celular del parlante, reproduce algo un segundo y vuelve a intentar." };
+  const saved = ls.get("spotifyDevice"), pick = devPick();
+  let dev = null;
+  if (pick){
+    dev = list.find(x => x.id === pick.id) || list.find(x => x.name === pick.name);
+    if (!dev) throw { msg: "No encuentro \"" + pick.name + "\" en Spotify. Abre la app de Spotify en ese equipo (déjala en pantalla) y vuelve a tocar Empezar mi turno. Para usar otro equipo: Menú → Dónde suena la música.", code: 404, lost: true };
+    // Si el equipo elegido no es el que está sonando, se le pasa la música
+    if (!dev.is_active){ try { await sp("PUT", "/me/player", { device_ids: [dev.id], play: true }) } catch (e) {} await wait(1200) }
+  }
+  if (!dev) dev = list.find(x => x.is_active) || list.find(x => x.id === saved) || list[0];
+  if (!dev) throw { msg: "No encuentro ningún Spotify abierto. Abre la app de Spotify en el celular del parlante, reproduce algo un segundo y vuelve a intentar.", code: 404, lost: true };
   ls.set("spotifyDevice", dev.id);
   ls.set("spotifyDeviceInfo", { id: dev.id, vol: dev.volume_percent, canVol: dev.supports_volume !== false, type: dev.type || "" });
   return dev.id;
@@ -962,8 +971,22 @@ async function hostCheck(){
     if (req.type === "start" || req.type === "next" || req.type === "play"){
       let done = false;
       if (tok().v === SCOPE_V){
-        try { await hostPlayTurn(); done = true }
-        catch (e) { if (!(e && (e.fallback || e.code === 403 || e.code === 404))) throw e }
+        // Cortes de internet o de Spotify: se reintenta solo hasta 3 veces (esperando a que vuelva internet) antes de avisar
+        for (let k = 1; ; k++){
+          try { await hostPlayTurn(); done = true; break }
+          catch (e) {
+            const net = e && (e.code === 0 || e.code >= 500 || e.code === 429 || (e.code === 404 && !e.fallback));
+            if (net && k < 3){
+              hostRetry = !navigator.onLine ? "Se cortó internet en este celular. Esperando que vuelva para poner la canción…" : "Spotify no respondió. Reintentando (" + (k + 1) + " de 3)…"; render();
+              await waitOnline(20000); await wait(1500 * k); continue;
+            }
+            hostRetry = "";
+            if (e && e.lost) throw e;
+            if (!(e && (e.fallback || e.code === 403 || e.code === 404))) throw e;
+            break;
+          }
+        }
+        hostRetry = "";
       }
       if (!done){
         await unduck();
@@ -982,11 +1005,19 @@ async function hostCheck(){
       if (st.checked && st.song) reveal(); else await hostReveal(req.force);
       if ((st.after || "duck") === "pause" && (st.phase === "reveal" || st.phase === "needyear")){ try { await sp("PUT", "/me/player/play" + devQ("?")) } catch (e) {} } }
   } catch (e) {
-    st.msg = { t: (e && e.msg) || "Algo falló al hablar con Spotify. Intenta de nuevo.", again: !!(e && e.again) };
+    hostRetry = "";
+    const play = req.type === "start" || req.type === "next" || req.type === "play";
+    st.msg = { t: (e && e.msg) || "Algo falló al hablar con Spotify. Intenta de nuevo.", again: !!(e && e.again), retry: play };
   } finally {
     if (st.req && st.req.id === req.id) st.req = null;
     hostBusy = false; commit(); render();
   }
+}
+let hostRetry = "";
+// Espera a que el celular vuelva a tener internet (o hasta ms milisegundos)
+function waitOnline(ms){
+  if (navigator.onLine) return Promise.resolve();
+  return new Promise(res => { const t = setTimeout(done, ms); function done(){ clearTimeout(t); removeEventListener("online", done); res() } addEventListener("online", done) });
 }
 function request(type, extra){ st.req = Object.assign({ type, id: rid() }, extra || {}); st.msg = null; if (type === "play" || type === "next" || type === "start") st.clipAt = null }
 // Canje: 3 fichas = 1 carta directo a la línea del jugador de turno
@@ -1252,12 +1283,36 @@ function scoreHTML(){
   return `<div class="score">${st.players.map((p,i)=>`<div class="chip${i===st.cur?" on":""}">${esc(p.name)}${me===i?' <span class="you">tú</span>':""} <b>${p.tl.length}/${st.target}</b><span class="tok" aria-label="${p.tk} fichas">${"<i></i>".repeat(p.tk)}</span></div>`).join("")}</div>`;
 }
 function statusHTML(){
-  const label = conn === "on" ? "En vivo" : conn === "connecting" ? "Conectando…" : conn === "error" ? "Sin conexión" : "";
+  const label = !navigator.onLine ? "Sin internet" : conn === "on" ? "En vivo" : conn === "connecting" ? "Conectando…" : conn === "error" ? "Sin conexión" : "";
   return `<div class="topbar"><span class="label">Sala <b class="code">${esc(room)}</b></span><span class="live ${conn}">${label}</span></div>`;
 }
 function msgHTML(){
   if (!st || !st.msg) return "";
+  if (st.msg.retry && st.phase === "turn") return `<div class="banner">${esc(st.msg.t)}<div class="row" style="margin-top:10px"><button class="gold" data-act="otra">Reintentar la canción</button></div></div>`;
   return `<div class="banner">${esc(st.msg.t)}${st.msg.again?`<div class="row" style="margin-top:10px"><button class="ghost" data-act="otra">Otra canción</button><button class="ghost" data-act="forceReveal">${st.phase==="check"?"Revisar igual":"Revelar igual"}</button></div>`:""}</div>`;
+}
+// ===== Dónde suena la música (equipo de Spotify) =====
+let devOpen = false, devList = null, devErr = "";
+const DEV_ICON = { TV: "📺", Smartphone: "📱", Computer: "💻", Speaker: "🔊", CastVideo: "📺", CastAudio: "🔊", Tablet: "📱", GameConsole: "🎮", Automobile: "🚗" };
+async function devLoad(){
+  devList = null; devErr = ""; render();
+  try { const d = await sp("GET", "/me/player/devices"); devList = (d && d.devices) || [] }
+  catch (e) { devList = []; devErr = (e && e.msg) || "No se pudo revisar." }
+  render();
+}
+function devPickerHTML(){
+  const pick = devPick();
+  const now = pick ? (DEV_ICON[pick.type] || "🔊") + " " + pick.name : "Automático (el Spotify que esté sonando)";
+  if (!devOpen) return `<div class="field"><span class="label">Dónde suena la música</span>
+    <div class="pladd"><div class="plinfo" style="flex:1"><b>${esc(now)}</b></div><button class="ghost" data-act="devList" type="button">Cambiar</button></div></div>`;
+  const rows = devList == null ? `<p class="muted pulse" style="margin:0">Buscando equipos con Spotify abierto…</p>`
+    : !devList.length ? `<p class="muted" style="margin:0">${esc(devErr || "No aparece ningún equipo. Abre la app de Spotify en la TV, el Android o el computador (que quede en pantalla) y toca Buscar de nuevo.")}</p>`
+    : devList.map(d => `<button class="${pick && pick.id === d.id ? "primary" : "ghost"}" data-act="devSet" data-id="${esc(d.id)}" type="button">${DEV_ICON[d.type] || "🔊"} ${esc(d.name)}${d.is_active ? " · sonando ahora" : ""}</button>`).join("");
+  return `<div class="field"><span class="label">Dónde suena la música</span>
+    <div class="steals">${rows}
+    <button class="ghost" data-act="devAuto" type="button">Automático (el Spotify que esté sonando)</button>
+    <div class="row"><button class="ghost" data-act="devList" type="button">Buscar de nuevo</button><button class="ghost" data-act="devClose" type="button">Listo</button></div></div>
+    <p class="muted" style="font-size:.8rem;margin:0">Para que aparezca una TV o un Android, abre ahí la app de Spotify con tu cuenta.</p></div>`;
 }
 function hostPanel(){
   if (!isHost || (st ? st.src : setup.src) !== "spotify") return "";
@@ -1312,7 +1367,7 @@ function render(){
   window.scrollTo(0, y);
 }
 
-const VERSION = "17-oct v37";
+const VERSION = "18-oct v38";
 function renderView(){
   const app = $app();
   checkGame();
@@ -1354,6 +1409,7 @@ function renderView(){
           <option value="manual" ${setup.src==="manual"?"selected":""}>Un DJ busca cada canción</option>
         </select></label>
       ${setup.src==="spotify"?plEditorHTML():""}
+      ${setup.src==="spotify"&&tok()?devPickerHTML():""}
       ${setup.src==="spotify"?`
         <label class="field"><span class="label">Tiempo para responder</span>
           <select id="clip" data-act="clip">${[[10,"10 segundos"],[15,"15 segundos"],[20,"20 segundos"],[30,"30 segundos"],[0,"Sin límite"]].map(([v,t])=>`<option value="${v}" ${v==setup.clip?"selected":""}>${t}</option>`).join("")}</select></label>
@@ -1395,7 +1451,7 @@ function renderView(){
     if (reqSeen.id !== st.req.id){ reqSeen = { id: st.req.id, t: Date.now() }; setTimeout(render, 9000) }
     const late = Date.now() - reqSeen.t > 8500;
     const what = st.req.type==="reveal" ? "Leyendo la canción en Spotify…" : "Poniendo la canción en Spotify…";
-    waitingHost = !late ? `<p class="muted pulse">${what}${isHost?"":" (lo hace el celular que creó la sala)"}</p>`
+    waitingHost = isHost && hostRetry ? `<p class="muted pulse">${esc(hostRetry)}</p>` : !late ? `<p class="muted pulse">${what}${isHost?"":" (lo hace el celular que creó la sala)"}</p>`
       : isHost && !tok() ? `<div class="banner">Conecta Spotify arriba para continuar.</div>`
       : `<div class="banner">${isHost?"Spotify está tardando en responder.":"El celular que creó la sala no responde. Desbloquéalo y deja abierta la pestaña del juego: lo hará solo apenas vuelva."}
           <div class="row" style="margin-top:10px"><button class="ghost" data-act="cancelReq">Cancelar y volver a intentar</button></div></div>`;
@@ -1417,6 +1473,7 @@ function renderView(){
       <button class="ghost" data-act="end">Terminar y ver resultados</button>
       <button class="${confirmReset?"primary":"ghost"}" data-act="again">${confirmReset?"Sí, borrar la partida para todos":"Nueva partida (borra esta)"}</button>
       ${isHost&&spot()?`<p class="muted" style="font-size:.85rem">🎵 Playlist: ${plCache.tracks?plCache.tracks.length+" canciones":"se carga al primer turno"} · sonaron en esta partida: ${(st.played||[]).length} · historial de este celular: ${ls.get("heardHist",[]).length}${queueBad?" · modo directo":""}</p>`:""}
+      ${isHost&&spot()&&tok()?devPickerHTML():""}
       <button class="ghost" data-act="palette">Colores: ${palette()==="nueva"?"nuevos (tocar para ver los originales)":"originales (tocar para ver los nuevos)"}</button>
       <button class="ghost" data-act="leave">Salir de la sala</button></section>
       `;
@@ -1653,6 +1710,10 @@ document.addEventListener("click", e => {
       break;
     case "confirm": if (st.slot == null) return; stopMic(); st.timeUp = false; st.phase = "check"; st.robando = null; st.checkAt = Date.now(); st.guess = { t: guessDraft.t.trim().slice(0,80), a: guessDraft.a.trim().slice(0,80) }; break;
     case "otra": if (spot()){ request("play"); st.heard = false } break;
+    case "devList": devOpen = true; devLoad(); return;
+    case "devSet": { const d = (devList || []).find(x => x.id === el.dataset.id); if (d){ ls.set("spotifyPick", { id: d.id, name: d.name, type: d.type }); ls.set("spotifyDevice", d.id); ls.set("spotifyDeviceInfo", { id: d.id, vol: d.volume_percent, canVol: d.supports_volume !== false, type: d.type || "" }); sp("PUT", "/me/player", { device_ids: [d.id], play: true }).catch(() => {}) } devOpen = false; render(); return }
+    case "devAuto": ls.set("spotifyPick", null); devOpen = false; render(); return;
+    case "devClose": devOpen = false; render(); return;
     case "noVolOk": ls.set("noVolume", null); st.after = "none"; break;
     case "mic": startMic(el.dataset.f); return;
     case "play": if (spot() && st.phase === "turn" && !st.req){ request("play"); st.heard = false } else return; break;
@@ -1707,6 +1768,10 @@ document.addEventListener("change", e => {
   ls.set("setup", setup);
 });
 document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "join") document.querySelector('[data-act="join"]')?.click() });
+
+// Al volver internet: reconecta la sala, manda lo pendiente y redibuja
+addEventListener("online", () => { try { flush() } catch (e) {} render(); if (isHost) hostCheck() });
+addEventListener("offline", () => render());
 
 // Para la página de pruebas
 window.__ldt = { room: () => room, host: () => isHost, phase: () => st && st.phase, cur: () => st ? st.cur : null, conn: () => conn };
