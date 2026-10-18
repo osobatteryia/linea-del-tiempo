@@ -43,7 +43,7 @@ Juego musical estilo **Hitster** para jugar en grupo, cada uno desde su celular.
 1. El jugador de turno toca **▶ Empezar mi turno** (antes no puede elegir posición).
 2. El anfitrión elige una canción de la playlist no usada (`loadPlaylist`, `hostPlayTurn`). **Si Spotify está en un celular** (iPhone/Android): método v18 (`playPhoneV18`), el que funcionaba en el iPhone de Oso; la lista de ~60 canciones mantiene a Spotify sonando entre turnos (si queda en silencio en segundo plano, el iPhone lo duerme). La canción que sonaba de fondo se marca como escuchada. **En TV/computador/parlante:** `loadNoPause`: play directo de la canción en el punto al azar, sin pausas, y confirma que suene (reenvía play si quedó en pausa). Las TV aplicaban las pausas del método anterior (`loadPausedAt`, ya sin uso) con atraso y quedaban mudas. En iPhone puede quedar un "clic" muy corto del comienzo: Spotify iOS ignora `position_ms` y no deja bajar el volumen. Con parlante Spotify Connect/computador/Android no pasa.
 3. Corre la cuenta regresiva (10 s por defecto) en todos los celulares. Al llegar a 0 se entrega lo que haya elegido el jugador.
-4. Al terminar el tiempo, el volumen baja a la mitad (`duck`) y vuelve en el próximo turno. **En iPhone Spotify no permite cambiar el volumen** → la música sigue sonando igual; ya **no se muestra aviso** (Oso pidió quitarlo). **No se pausa** por defecto: en iPhone, Spotify en pausa y en segundo plano se desconecta ("No encuentro ningún Spotify abierto").
+4. Al terminar el tiempo la música **sigue sonando igual, mismo volumen** (Oso pidió que el volumen nunca baje; ya no existe la opción de bajarlo). **No se pausa** por defecto: en iPhone, Spotify en pausa y en segundo plano se desconecta ("No encuentro ningún Spotify abierto").
 5. Al revelar, el anfitrión usa la canción que guardó al empezar (`clipTrack:<sala>`), no lo que diga Spotify.
 
 ## Mapa del código (`index.html`)
@@ -97,7 +97,7 @@ Fases de `st.phase`: `turn` → `check` (botón Revisar respuesta) → `steal` (
 - Al fallar se muestra **dónde iba la carta** en su línea (✗ Aquí la puso / ✓ Aquí iba). Si hubo **robo fallido**, todos ven también dónde iba en la línea del que robó ("Robo fallido · dónde iba en la línea de X"; si no alcanzó a ubicarla, solo "✓ Aquí iba").
 - Ya no se muestra el aviso "Año según el álbum en Spotify… Corregir año" al revelar (Oso pidió quitarlo). El código de `fixYear` sigue, pero sin botón.
 - Orden de turnos: el de la lista de nombres al crear la partida.
-- Opciones al crear: tiempo para responder (10/15/20/30/sin límite), parte de la canción (al azar / desde el comienzo), al terminar el tiempo (bajar volumen / seguir / pausar), cartas para ganar, fichas iniciales, playlist.
+- Opciones al crear: tiempo para responder (10/15/20/30/sin límite), parte de la canción (al azar / desde el comienzo), al terminar el tiempo (seguir sonando igual / pausar), cartas para ganar, fichas iniciales, playlist.
 
 ## Diseño
 Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fondo `#0b0b10`, acentos rosa `#ff3fa4`, lima `#c6ff3d`, cian `#3de8ff`; fuentes Unbounded / Space Grotesk / Space Mono; cartas con brillo de color por década (`color(y)`, variable CSS `--c`).
@@ -122,8 +122,9 @@ Estilo "neón de club" (vino de la rama `estilo-ui-ux-pro-max` de otro chat): fo
 
 ## Registro de cambios
 
-### Pendientes de consolidar (1/5)
+### Pendientes de consolidar (2/5)
 - Smart TV: con `loadPausedAt` la TV cambiaba la carátula pero quedaba en pausa (aplica las órdenes de pausa con atraso). Ahora TV/computador/parlante usan `loadNoPause` (play directo con `position_ms`, sin pausas; confirma con `GET /me/player` y reenvía play si la canción correcta sigue en pausa). `loadPausedAt`/`loadDirectAt` quedan sin uso.
+- Volumen fijo: Oso pidió que **nunca baje el volumen** al terminar el tiempo. Quitada la opción "Bajar el volumen a la mitad"; por defecto "Seguir sonando igual" (`after:"none"`), un `duck` guardado se convierte a `none`. `duck()` queda sin uso; `unduck` sigue para devolver el volumen si quedó bajo de antes.
 
 ### Historial
 - Juego base, sala por QR con MQTT, Spotify del anfitrión, banco de pruebas de 4 celulares.

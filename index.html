@@ -364,7 +364,9 @@ room = room ? room.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) : null;
 let st = null;            // estado compartido de la partida
 let received = false;     // ya llegó el estado de la sala
 let menuOpen = false, confirmReset = false, yearDraft = "", joinDraft = "";
-let setup = Object.assign({names:["Ana","Pipe","Coni"],target:10,filter:"all",tokens:2,src:"spotify",playlist:DEFAULT_PLAYLIST,clip:10,after:"duck"}, ls.get("setup", {}));
+let setup = Object.assign({names:["Ana","Pipe","Coni"],target:10,filter:"all",tokens:2,src:"spotify",playlist:DEFAULT_PLAYLIST,clip:10,after:"none"}, ls.get("setup", {}));
+// Oso pidió que el volumen nunca baje: lo antiguo guardado como "duck" pasa a "seguir sonando igual"
+if (setup.after === "duck") setup.after = "none";
 if (NOMBRES) setup.names = NOMBRES.split(",").map(x => x.trim()).filter(Boolean).slice(0, 10);
 let me = room ? ls.get("me:" + room) : null;
 let isHost = room ? !!ls.get("host:" + room) : false;
@@ -893,7 +895,7 @@ async function unduck(dev){
 function afterClip(){
   clearTimeout(clipTimer); clipDeadline = null;
   const mode = (st && st.after) || "duck";
-  if (mode === "pause") pauseClip(); else if (mode === "duck") duck();
+  if (mode === "pause") pauseClip();   // "duck" (bajar volumen) quitado a pedido de Oso: el volumen se mantiene siempre
 }
 // Si el anfitrión salió de la página mientras sonaba el fragmento, se pausa apenas vuelve
 document.addEventListener("visibilitychange", () => {
@@ -1063,7 +1065,7 @@ function startGame(){
   const src = setup.src;
   st = { gid: Math.random().toString(36).slice(2, 10), phase:"turn", src, playlist: setup.playlist, players: names.map(n => ({ name:n, tl:[card(pool.pop())], tk: setup.tokens })), cur:0, deck: pool,
     song: src === "spotify" ? null : card(pool.pop()), slot:null, robando:null, stealer:null, sslot:null, res:null, bonus:false, heard:false,
-    target: setup.target, round:1, used:[], lastUri:null, req:null, msg:null, pending:null, clip: src === "spotify" ? (setup.clip || 0) : 0, clipAt:null, started:false, after: setup.after || "duck", part: setup.part || "random" };
+    target: setup.target, round:1, used:[], lastUri:null, req:null, msg:null, pending:null, clip: src === "spotify" ? (setup.clip || 0) : 0, clipAt:null, started:false, after: setup.after === "pause" ? "pause" : "none", part: setup.part || "random" };
   if (me != null && me !== "todos") setMe(null);
 }
 function nextTurn(){
@@ -1358,7 +1360,7 @@ function render(){
   window.scrollTo(0, y);
 }
 
-const VERSION = "18-oct v39";
+const VERSION = "18-oct v40";
 function renderView(){
   const app = $app();
   checkGame();
@@ -1407,8 +1409,8 @@ function renderView(){
         ${setup.clip?`<label class="field"><span class="label">Parte de la canción</span>
           <select id="part" data-act="part">${[["random","Una parte al azar"],["start","Desde el comienzo"]].map(([v,t])=>`<option value="${v}" ${v===(setup.part||"random")?"selected":""}>${t}</option>`).join("")}</select></label>
           <label class="field"><span class="label">Al terminar el tiempo</span>
-          <select id="after" data-act="after">${[["duck","Bajar el volumen a la mitad"],["none","Seguir sonando igual"],["pause","Pausar la música"]].map(([v,t])=>`<option value="${v}" ${v===(setup.after||"duck")?"selected":""}>${t}</option>`).join("")}</select></label>
-          ${(setup.after||"duck")==="pause"?`<p class="muted" style="font-size:.85rem">Pausar solo funciona bien si Spotify queda abierto en pantalla en otro celular. En iPhone, Spotify en pausa y en segundo plano se desconecta.</p>`:""}`:""}
+          <select id="after" data-act="after">${[["none","Seguir sonando igual"],["pause","Pausar la música"]].map(([v,t])=>`<option value="${v}" ${v===(setup.after==="pause"?"pause":"none")?"selected":""}>${t}</option>`).join("")}</select></label>
+          ${setup.after==="pause"?`<p class="muted" style="font-size:.85rem">Pausar solo funciona bien si Spotify queda abierto en pantalla en otro celular. En iPhone, Spotify en pausa y en segundo plano se desconecta.</p>`:""}`:""}
         <p class="muted" style="font-size:.88rem">${setup.clip?`En cada turno suena un fragmento de ${setup.clip} segundos ${(setup.part||"random")==="start"?"desde el comienzo":"de una parte al azar"} de la canción. Ese es el tiempo para responder.`:"La canción suena completa y no hay límite de tiempo."}</p>`
       :`<label class="field"><span class="label">Canciones</span>
         <select id="filter" data-act="filter">
