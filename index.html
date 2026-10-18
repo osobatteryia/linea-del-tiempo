@@ -715,6 +715,7 @@ async function loadNoPause(dev, t, pos){
       await wait(200);
       let c = null; try { c = await sp("GET", "/me/player") } catch (e) {}
       last = c;
+      if (c && c.item && c.item.uri === t.uri && !c.is_playing && (k === 3 || k === 7)){ try { await sp("PUT", "/me/player/play?device_id=" + dev) } catch (e) {} continue }
       if (c && c.item && c.item.uri === t.uri && c.is_playing){
         if (pos && (c.progress_ms || 0) < pos - 2000){ try { await sp("PUT", "/me/player/seek?position_ms=" + pos + "&device_id=" + dev) } catch (e) {} }
         return { ok: true };
@@ -838,19 +839,9 @@ async function hostPlayTurn(){
     if (len){ clipDeadline = Date.now() + len * 1000; clipTimer = setTimeout(afterClip, len * 1000) }
     return;
   }
-  try { await sp("PUT", "/me/player/pause?device_id=" + dev) } catch (e) {}
-  // En iPhone, Spotify ignora el punto de inicio al cargar una canción nueva y suena el comienzo.
-  // Para evitarlo: se carga la canción en pausa (cola + siguiente), se mueve al punto y recién ahí se reproduce.
-  if (pos && await loadPausedAt(dev, t, pos, prevUri)){
-    ls.set("clipTrack:" + room, { uri: t.uri, name: t.name, artists: t.artists, date: t.date, turn: st.round + ":" + st.cur });
-    st.started = true;
-    st.clipAt = len ? Date.now() : null;
-    clearTimeout(clipTimer);
-    if (len){ clipDeadline = Date.now() + len * 1000; clipTimer = setTimeout(afterClip, len * 1000) }
-    return;
-  }
-  // Se manda SOLO la canción elegida: así, si sigue sonando, no pasan otras canciones de la playlist que después saldrían "repetidas"
-  await loadDirectAt(dev, t, pos);
+  // TV, computador o parlante: sin pausas (las TV aplican las órdenes con atraso y quedaban en pausa).
+  // Play directo de la canción en el punto elegido y se confirma que de verdad esté sonando (si no, se insiste).
+  await loadNoPause(dev, t, pos);
   ls.set("clipTrack:" + room, { uri: t.uri, name: t.name, artists: t.artists, date: t.date, turn: st.round + ":" + st.cur });
   st.started = true;
   st.clipAt = len ? Date.now() : null;
@@ -1367,7 +1358,7 @@ function render(){
   window.scrollTo(0, y);
 }
 
-const VERSION = "18-oct v38";
+const VERSION = "18-oct v39";
 function renderView(){
   const app = $app();
   checkGame();
